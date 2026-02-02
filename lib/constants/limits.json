@@ -1,0 +1,14 @@
+{
+    "context-windows": {
+        "gpt-4o": "128k",
+        "gpt-4o-mini": "128k",
+        "gpt-4": "128k",
+        "o1": "128k",
+        "claude-3-5": "200k",
+        "claude-3": "200k",
+        "gemini-1.5": "1M",
+        "gemini-2.0": "1M",
+        "gemini-2.5": "2M",
+        "gemma": "8k"
+    }
+}
