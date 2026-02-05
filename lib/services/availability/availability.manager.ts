@@ -34,32 +34,35 @@ const MODEL_PRIORITY_PATTERNS: Array<{
   pattern: RegExp;
   priority: ModelPriority;
 }> = [
-    // Priority 5: flagship models
-    { pattern: /gpt-4o(?!-mini)/, priority: 5 },
-    { pattern: /claude-3-5-sonnet/, priority: 5 },
-    { pattern: /o1(?!-mini)/, priority: 5 },
+  // Priority 5: Flagship models
+  { pattern: /gpt-4\.5/, priority: 5 },
+  { pattern: /gpt-4o(?!-mini)/, priority: 5 },
+  { pattern: /claude-3-5-sonnet/, priority: 5 },
+  { pattern: /gemini-2\.5-pro/, priority: 5 },
+  { pattern: /o1(?!-mini)/, priority: 5 },
+  { pattern: /o3(?!-mini)/, priority: 5 },
 
-    // Priority 4: Strong models
-    { pattern: /o3-mini/, priority: 4 },
-    { pattern: /o1-mini/, priority: 4 },
-    { pattern: /gpt-4-turbo/, priority: 4 },
-    { pattern: /claude-3-opus/, priority: 4 },
-    { pattern: /gemini-2\.0-flash/, priority: 4 },
-    { pattern: /gemini-1\.5-pro/, priority: 4 },
+  // Priority 4: Strong models
+  { pattern: /o3-mini/, priority: 4 },
+  { pattern: /gpt-4-turbo/, priority: 4 },
+  { pattern: /claude-3-opus/, priority: 4 },
+  { pattern: /gemini-2\.0-flash/, priority: 4 },
+  { pattern: /gemini-1\.5-pro/, priority: 4 },
 
-    // Priority 3: Good everyday models
-    { pattern: /gpt-4o-mini/, priority: 3 },
-    { pattern: /gpt-3\.5-turbo/, priority: 3 },
-    { pattern: /claude-3-5-haiku/, priority: 3 },
-    { pattern: /claude-3-haiku/, priority: 3 },
-    { pattern: /gemini-1\.5-flash/, priority: 3 },
+  // Priority 3: Good everyday models
+  { pattern: /gpt-4o-mini/, priority: 3 },
+  { pattern: /gpt-3\.5-turbo/, priority: 3 },
+  { pattern: /claude-3-haiku/, priority: 3 },
+  { pattern: /gemini-2\.5-flash/, priority: 3 },
+  { pattern: /gemini-1\.5-flash/, priority: 3 },
 
-    // Priority 2: Lightweight/experimental
-    { pattern: /gemini-2\.0-flash-lite/, priority: 2 },
-    { pattern: /gemma/, priority: 2 },
+  // Priority 2: Lightweight/experimental
+  { pattern: /o1-mini/, priority: 2 },
+  { pattern: /gemini-2\.0-flash-lite/, priority: 2 },
+  { pattern: /gemma/, priority: 2 },
 
-    // Priority 1: Specialized/legacy (default)
-  ];
+  // Priority 1: Specialized/legacy (default)
+];
 
 // ============================================
 // AVAILABILITY MANAGER CLASS

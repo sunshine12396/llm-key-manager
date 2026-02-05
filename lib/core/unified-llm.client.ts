@@ -148,7 +148,7 @@ export class UnifiedLLMClient {
                 // Success - mark model as available
                 availabilityManager
                   .markModelAvailable(keyMetadata.id, modelId)
-                  .catch(() => { });
+                  .catch(() => {});
 
                 return result;
               } catch (e) {
@@ -161,7 +161,7 @@ export class UnifiedLLMClient {
                 if (errorCode) {
                   availabilityManager
                     .handleRuntimeError(keyMetadata.id, modelId, errorCode, msg)
-                    .catch(() => { });
+                    .catch(() => {});
                 }
 
                 if (

@@ -1,76 +1,113 @@
-import { IProviderAdapter, KeyFormatValidationResult } from '../types';
-import { ChatRequest, ChatResponse } from '../../models/workloads';
-import { RateLimitData, AIProviderId, ModelCapability } from '../../models/metadata';
-import { modelDataService } from '../../services/model-data.service';
-
-import { completeChat } from './adapter/chat';
-import { listModels, ownsModel } from './discovery/models';
-import { validateKeyFormat } from './discovery/health';
-import { checkRateLimits, detectTier, getHeaders } from './quota/rate-limits';
+import { IProviderAdapter, KeyFormatValidationResult } from "../types";
+import { ChatRequest, ChatResponse } from "../../models/workloads";
 import {
-    EmbeddingRequest,
-    EmbeddingResponse,
-    ImageGenerationRequest,
-    ImageGenerationResponse,
-    AudioTranscriptionRequest,
-    AudioTranscriptionResponse,
-    TextToSpeechRequest,
-    TextToSpeechResponse
-} from '../../models/workloads/multimodal';
+  RateLimitData,
+  AIProviderId,
+  ModelCapability,
+} from "../../models/metadata";
+import { modelDataService } from "../../services/model-data.service";
+import { createTypedError } from "../../core/errors";
+
+import { completeChat } from "./adapter/chat";
+import { listModels, ownsModel } from "./discovery/models";
+import { validateKeyFormat } from "./discovery/health";
+import { checkRateLimits, detectTier } from "./quota/rate-limits";
+import {
+  EmbeddingRequest,
+  EmbeddingResponse,
+  ImageGenerationRequest,
+  ImageGenerationResponse,
+  AudioTranscriptionRequest,
+  AudioTranscriptionResponse,
+  TextToSpeechRequest,
+  TextToSpeechResponse,
+} from "../../models/workloads/multimodal";
 
 export class AnthropicPlugin implements IProviderAdapter {
-    readonly providerId: AIProviderId = 'anthropic';
+  readonly providerId: AIProviderId = "anthropic";
+  readonly baseUrl = "https://api.anthropic.com/v1";
 
-    get baseUrl(): string {
-        return modelDataService.getProvider(this.providerId)?.baseUrl || 'https://api.anthropic.com/v1';
-    }
+  ownsModel(modelId: string): boolean {
+    return ownsModel(modelId);
+  }
 
-    ownsModel(modelId: string): boolean {
-        return ownsModel(modelId);
-    }
+  supports(modelId: string, capability: ModelCapability): boolean {
+    return modelDataService.getModelCapabilities(modelId).includes(capability);
+  }
 
-    supports(modelId: string, capability: ModelCapability): boolean {
-        return modelDataService.getModelCapabilities(modelId).includes(capability);
-    }
+  validateKeyFormat(apiKey: string): KeyFormatValidationResult {
+    return validateKeyFormat(apiKey);
+  }
 
-    validateKeyFormat(apiKey: string): KeyFormatValidationResult {
-        return validateKeyFormat(apiKey);
-    }
+  async listModels(apiKey: string): Promise<string[]> {
+    return listModels(apiKey, this.baseUrl);
+  }
 
+  getHeaders(apiKey: string): Record<string, string> {
+    return {
+      "x-api-key": apiKey,
+      "anthropic-version": "2024-10-22",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "Content-Type": "application/json",
+    };
+  }
 
-    async listModels(apiKey: string): Promise<string[]> {
-        return listModels(apiKey, this.baseUrl);
-    }
+  async checkRateLimits(
+    apiKey: string,
+    _modelId?: string,
+  ): Promise<RateLimitData> {
+    return checkRateLimits(apiKey, this.baseUrl);
+  }
 
-    getHeaders(apiKey: string): Record<string, string> {
-        return getHeaders(apiKey);
-    }
+  detectTier(rateLimits?: RateLimitData): string {
+    return detectTier(rateLimits);
+  }
 
-    async checkRateLimits(apiKey: string, _modelId?: string): Promise<RateLimitData> {
-        return checkRateLimits(apiKey, this.baseUrl);
-    }
+  async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
+    return completeChat(apiKey, request);
+  }
 
-    detectTier(rateLimits?: RateLimitData): string {
-        return detectTier(rateLimits);
-    }
+  async embeddings(
+    _apiKey: string,
+    _request: EmbeddingRequest,
+  ): Promise<EmbeddingResponse> {
+    throw createTypedError(
+      "Embeddings are not supported by Anthropic API yet.",
+      501,
+      "anthropic",
+    );
+  }
 
-    async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
-        return completeChat(apiKey, request);
-    }
+  async generateImage(
+    _apiKey: string,
+    _request: ImageGenerationRequest,
+  ): Promise<ImageGenerationResponse> {
+    throw createTypedError(
+      "Image generation is not supported by Anthropic API yet.",
+      501,
+      "anthropic",
+    );
+  }
 
-    async embeddings(_apiKey: string, _request: EmbeddingRequest): Promise<EmbeddingResponse> {
-        throw new Error('Embeddings are not supported by Anthropic API yet.');
-    }
+  async transcribeAudio(
+    _apiKey: string,
+    _request: AudioTranscriptionRequest,
+  ): Promise<AudioTranscriptionResponse> {
+    throw createTypedError(
+      "Audio transcription is not supported by Anthropic API yet.",
+      501,
+      "anthropic",
+    );
+  }
 
-    async generateImage(_apiKey: string, _request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
-        throw new Error('Image generation is not supported by Anthropic API yet.');
-    }
-
-    async transcribeAudio(_apiKey: string, _request: AudioTranscriptionRequest): Promise<AudioTranscriptionResponse> {
-        throw new Error('Audio transcription is not supported by Anthropic API yet.');
-    }
-
-    async textToSpeech(_apiKey: string, _request: TextToSpeechRequest): Promise<TextToSpeechResponse> {
-        throw new Error('Text to speech is not supported by Anthropic API yet.');
-    }
+  async textToSpeech(
+    _apiKey: string,
+    _request: TextToSpeechRequest,
+  ): Promise<TextToSpeechResponse> {
+    throw createTypedError(
+      "Text to speech is not supported by Anthropic API yet.",
+      501,
+      "anthropic",
+    );
+  }
 }

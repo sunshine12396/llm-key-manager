@@ -8,7 +8,17 @@ import { scheduler } from "./scheduler";
 import { validatorJob } from "./validator.job";
 
 class BackgroundJobsManager {
+  private static instance: BackgroundJobsManager;
   private isInitialized = false;
+
+  private constructor() {}
+
+  static getInstance(): BackgroundJobsManager {
+    if (!BackgroundJobsManager.instance) {
+      BackgroundJobsManager.instance = new BackgroundJobsManager();
+    }
+    return BackgroundJobsManager.instance;
+  }
 
   /**
    * Start all background services
@@ -30,9 +40,9 @@ class BackgroundJobsManager {
     scheduler.startJob(
       {
         id: "model-recovery",
-        intervalMs: 5 * 60 * 1000, // Every 5 minutes (was 1h)
+        intervalMs: 5 * 60 * 1000,
         runImmediately: true,
-        pauseOnHidden: true, // Optimization: Don't waste API calls if user isn't looking
+        pauseOnHidden: true,
       },
       async () => {
         const result = await validatorJob.retryUnavailableModels();
@@ -77,10 +87,11 @@ class BackgroundJobsManager {
   stop() {
     console.log("[BackgroundJobs] Stopping all lifecycle services...");
     scheduler.stopAll();
+    this.isInitialized = false;
   }
 }
 
-export const backgroundJobs = new BackgroundJobsManager();
+export const backgroundJobs = BackgroundJobsManager.getInstance();
 
 // Re-export specific jobs for convenience
 export { validatorJob };

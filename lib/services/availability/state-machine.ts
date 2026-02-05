@@ -32,7 +32,7 @@
 /**
  * All possible states for a (key, model) pair.
  */
-export type ModelState =
+export type ModelState = 
     | 'NEW'           // Just added, never checked
     | 'CHECKING'      // Currently being validated
     | 'AVAILABLE'     // Working, can be used for requests
@@ -43,7 +43,7 @@ export type ModelState =
 /**
  * Events that trigger state transitions.
  */
-export type TransitionEvent =
+export type TransitionEvent = 
     | 'START_CHECK'       // Begin validation
     | 'CHECK_SUCCESS'     // Validation passed
     | 'CHECK_TEMP_FAIL'   // Temporary failure (429, 5xx, network)
@@ -120,7 +120,7 @@ export interface StateContext {
  * All components (background job, runtime handler, UI) should use this.
  */
 export class ModelStateMachine {
-
+    
     /**
      * Attempt to transition from currentState via event.
      * Returns the result with success/failure and new state.
@@ -180,22 +180,22 @@ export class ModelStateMachine {
      */
     static classifyError(errorCode: number | undefined): 'TEMP' | 'PERM' | 'UNKNOWN' {
         if (!errorCode) return 'UNKNOWN';
-
+        
         // Permanent failures
         if (errorCode === 401 || errorCode === 403 || errorCode === 404) {
             return 'PERM';
         }
-
+        
         // Temporary failures
         if (errorCode === 429 || errorCode >= 500) {
             return 'TEMP';
         }
-
+        
         // Other 4xx errors might be permanent
         if (errorCode >= 400 && errorCode < 500) {
             return 'PERM';
         }
-
+        
         return 'UNKNOWN';
     }
 
@@ -207,7 +207,7 @@ export class ModelStateMachine {
         isRuntime: boolean
     ): TransitionEvent {
         const classification = this.classifyError(errorCode);
-
+        
         if (isRuntime) {
             switch (classification) {
                 case 'PERM': return 'RUNTIME_PERM_FAIL';
@@ -225,10 +225,9 @@ export class ModelStateMachine {
 
     /**
      * Check if a state is considered "usable" for requests.
-     * Including 'NEW' allows for optimistic on-demand discovery.
      */
     static isUsable(state: ModelState): boolean {
-        return state === 'AVAILABLE' || state === 'NEW';
+        return state === 'AVAILABLE';
     }
 
     /**

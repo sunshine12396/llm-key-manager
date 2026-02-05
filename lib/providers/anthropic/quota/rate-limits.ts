@@ -1,30 +1,16 @@
 import { RateLimitData } from "../../../models/metadata";
-import { fetchWithTimeout } from "../../../utils/fetch-utils";
-import { ANTHROPIC_API_VERSION } from "../discovery/models";
-
-export function getHeaders(apiKey: string): Record<string, string> {
-  return {
-    "x-api-key": apiKey,
-    "anthropic-version": ANTHROPIC_API_VERSION,
-    "anthropic-dangerous-direct-browser-access": "true",
-    "Content-Type": "application/json",
-  };
-}
 
 export async function checkRateLimits(
   apiKey: string,
-  baseUrl: string,
+  _baseUrl: string,
 ): Promise<RateLimitData> {
   try {
-    const res = await fetchWithTimeout(
-      `${baseUrl}/models`,
-      {
-        headers: getHeaders(apiKey),
-      },
-      5000,
-    );
+    const { createAnthropicClient } = await import("../client");
+    const client = createAnthropicClient(apiKey);
 
-    const headers = res.headers;
+    // Use .asResponse() to get headers from a lightweight call (models.list)
+    const response = await client.models.list().asResponse();
+    const headers = response.headers;
 
     return {
       requests: {

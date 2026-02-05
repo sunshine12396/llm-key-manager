@@ -1,77 +1,100 @@
-import { IProviderAdapter, KeyFormatValidationResult } from '../types';
-import { ChatRequest, ChatResponse } from '../../models/workloads';
-import { RateLimitData, AIProviderId, ModelCapability } from '../../models/metadata';
-import { modelDataService } from '../../services/model-data.service';
-
-import { completeChat } from './adapter/chat';
-import { generateEmbeddings, generateImage, transcribeAudio, textToSpeech } from './adapter/multimodal';
-import { listModels, ownsModel } from './discovery/models';
-import { validateKeyFormat } from './discovery/health';
-import { checkRateLimits, detectTier, getHeaders } from './quota/rate-limits';
+import { IProviderAdapter, KeyFormatValidationResult } from "../types";
+import { ChatRequest, ChatResponse } from "../../models/workloads";
 import {
-    EmbeddingRequest,
-    EmbeddingResponse,
-    ImageGenerationRequest,
-    ImageGenerationResponse,
-    AudioTranscriptionRequest,
-    AudioTranscriptionResponse,
-    TextToSpeechRequest,
-    TextToSpeechResponse
-} from '../../models/workloads/multimodal';
+  RateLimitData,
+  AIProviderId,
+  ModelCapability,
+} from "../../models/metadata";
+import { modelDataService } from "../../services/model-data.service";
+
+import { completeChat } from "./adapter/chat";
+import {
+  generateEmbeddings,
+  generateImage,
+  transcribeAudio,
+  textToSpeech,
+} from "./adapter/multimodal";
+import { listModels, ownsModel } from "./discovery/models";
+import { validateKeyFormat } from "./discovery/health";
+import { checkRateLimits, detectTier } from "./quota/rate-limits";
+import {
+  EmbeddingRequest,
+  EmbeddingResponse,
+  ImageGenerationRequest,
+  ImageGenerationResponse,
+  AudioTranscriptionRequest,
+  AudioTranscriptionResponse,
+  TextToSpeechRequest,
+  TextToSpeechResponse,
+} from "../../models/workloads/multimodal";
 
 export class OpenAIPlugin implements IProviderAdapter {
-    readonly providerId: AIProviderId = 'openai';
+  readonly providerId: AIProviderId = "openai";
+  readonly baseUrl = "https://api.openai.com/v1";
 
-    get baseUrl(): string {
-        return modelDataService.getProvider(this.providerId)?.baseUrl || 'https://api.openai.com/v1';
-    }
+  ownsModel(modelId: string): boolean {
+    return ownsModel(modelId);
+  }
 
-    ownsModel(modelId: string): boolean {
-        return ownsModel(modelId);
-    }
+  supports(modelId: string, capability: ModelCapability): boolean {
+    return modelDataService.getModelCapabilities(modelId).includes(capability);
+  }
 
-    supports(modelId: string, capability: ModelCapability): boolean {
-        return modelDataService.getModelCapabilities(modelId).includes(capability);
-    }
+  validateKeyFormat(apiKey: string): KeyFormatValidationResult {
+    return validateKeyFormat(apiKey);
+  }
 
-    validateKeyFormat(apiKey: string): KeyFormatValidationResult {
-        return validateKeyFormat(apiKey);
-    }
+  async listModels(apiKey: string): Promise<string[]> {
+    return listModels(apiKey);
+  }
 
+  getHeaders(apiKey: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    };
+  }
 
-    async listModels(apiKey: string): Promise<string[]> {
-        return listModels(apiKey);
-    }
+  async checkRateLimits(
+    apiKey: string,
+    modelId?: string,
+  ): Promise<RateLimitData> {
+    return checkRateLimits(apiKey, modelId);
+  }
 
-    getHeaders(apiKey: string): Record<string, string> {
-        return getHeaders(apiKey);
-    }
+  detectTier(rateLimits?: RateLimitData): string {
+    return detectTier(rateLimits);
+  }
 
-    async checkRateLimits(apiKey: string, modelId?: string): Promise<RateLimitData> {
-        return checkRateLimits(apiKey, modelId);
-    }
+  async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
+    return completeChat(apiKey, request);
+  }
 
-    detectTier(rateLimits?: RateLimitData): string {
-        return detectTier(rateLimits);
-    }
+  async embeddings(
+    apiKey: string,
+    request: EmbeddingRequest,
+  ): Promise<EmbeddingResponse> {
+    return generateEmbeddings(apiKey, request);
+  }
 
-    async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
-        return completeChat(apiKey, request);
-    }
+  async generateImage(
+    apiKey: string,
+    request: ImageGenerationRequest,
+  ): Promise<ImageGenerationResponse> {
+    return generateImage(apiKey, request);
+  }
 
-    async embeddings(apiKey: string, request: EmbeddingRequest): Promise<EmbeddingResponse> {
-        return generateEmbeddings(apiKey, request);
-    }
+  async transcribeAudio(
+    apiKey: string,
+    request: AudioTranscriptionRequest,
+  ): Promise<AudioTranscriptionResponse> {
+    return transcribeAudio(apiKey, request);
+  }
 
-    async generateImage(apiKey: string, request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
-        return generateImage(apiKey, request);
-    }
-
-    async transcribeAudio(apiKey: string, request: AudioTranscriptionRequest): Promise<AudioTranscriptionResponse> {
-        return transcribeAudio(apiKey, request);
-    }
-
-    async textToSpeech(apiKey: string, request: TextToSpeechRequest): Promise<TextToSpeechResponse> {
-        return textToSpeech(apiKey, request);
-    }
+  async textToSpeech(
+    apiKey: string,
+    request: TextToSpeechRequest,
+  ): Promise<TextToSpeechResponse> {
+    return textToSpeech(apiKey, request);
+  }
 }

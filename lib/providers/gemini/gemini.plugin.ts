@@ -1,77 +1,108 @@
-import { IProviderAdapter, KeyFormatValidationResult } from '../types';
-import { ChatRequest, ChatResponse } from '../../models/workloads';
-import { RateLimitData, AIProviderId, ModelCapability } from '../../models/metadata';
-import { modelDataService } from '../../services/model-data.service';
-
-import { completeChat } from './adapter/chat';
-import { generateEmbeddings } from './adapter/multimodal';
-import { listModels, ownsModel } from './discovery/models';
-import { validateKeyFormat } from './discovery/health';
-import { checkRateLimits, detectTier, getHeaders } from './quota/rate-limits';
+import { IProviderAdapter, KeyFormatValidationResult } from "../types";
+import { ChatRequest, ChatResponse } from "../../models/workloads";
 import {
-    EmbeddingRequest,
-    EmbeddingResponse,
-    ImageGenerationRequest,
-    ImageGenerationResponse,
-    AudioTranscriptionRequest,
-    AudioTranscriptionResponse,
-    TextToSpeechRequest,
-    TextToSpeechResponse
-} from '../../models/workloads/multimodal';
+  RateLimitData,
+  AIProviderId,
+  ModelCapability,
+} from "../../models/metadata";
+import { modelDataService } from "../../services/model-data.service";
+import { createTypedError } from "../../core/errors";
+
+import { completeChat } from "./adapter/chat";
+import { generateEmbeddings } from "./adapter/multimodal";
+import { listModels, ownsModel } from "./discovery/models";
+import { validateKeyFormat } from "./discovery/health";
+import { checkRateLimits, detectTier } from "./quota/rate-limits";
+import {
+  EmbeddingRequest,
+  EmbeddingResponse,
+  ImageGenerationRequest,
+  ImageGenerationResponse,
+  AudioTranscriptionRequest,
+  AudioTranscriptionResponse,
+  TextToSpeechRequest,
+  TextToSpeechResponse,
+} from "../../models/workloads/multimodal";
 
 export class GeminiPlugin implements IProviderAdapter {
-    readonly providerId: AIProviderId = 'gemini';
+  readonly providerId: AIProviderId = "gemini";
+  readonly baseUrl = "https://generativelanguage.googleapis.com";
 
-    get baseUrl(): string {
-        return modelDataService.getProvider(this.providerId)?.baseUrl || 'https://generativelanguage.googleapis.com';
-    }
+  ownsModel(modelId: string): boolean {
+    return ownsModel(modelId);
+  }
 
-    ownsModel(modelId: string): boolean {
-        return ownsModel(modelId);
-    }
+  supports(modelId: string, capability: ModelCapability): boolean {
+    return modelDataService.getModelCapabilities(modelId).includes(capability);
+  }
 
-    supports(modelId: string, capability: ModelCapability): boolean {
-        return modelDataService.getModelCapabilities(modelId).includes(capability);
-    }
+  validateKeyFormat(apiKey: string): KeyFormatValidationResult {
+    return validateKeyFormat(apiKey);
+  }
 
-    validateKeyFormat(apiKey: string): KeyFormatValidationResult {
-        return validateKeyFormat(apiKey);
-    }
+  async listModels(apiKey: string): Promise<string[]> {
+    return listModels(apiKey, this.baseUrl, this.getHeaders(apiKey));
+  }
 
+  getHeaders(apiKey: string): Record<string, string> {
+    return {
+      "x-goog-api-key": apiKey,
+      "Content-Type": "application/json",
+    };
+  }
 
-    async listModels(apiKey: string): Promise<string[]> {
-        return listModels(apiKey, this.baseUrl, this.getHeaders(apiKey));
-    }
+  async checkRateLimits(
+    apiKey: string,
+    modelId?: string,
+  ): Promise<RateLimitData> {
+    return checkRateLimits(apiKey, this.baseUrl, modelId);
+  }
 
-    getHeaders(apiKey: string): Record<string, string> {
-        return getHeaders(apiKey);
-    }
+  detectTier(rateLimits?: RateLimitData): string {
+    return detectTier(rateLimits);
+  }
 
-    async checkRateLimits(apiKey: string, modelId?: string): Promise<RateLimitData> {
-        return checkRateLimits(apiKey, this.baseUrl, modelId);
-    }
+  async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
+    return completeChat(apiKey, request);
+  }
 
-    detectTier(rateLimits?: RateLimitData): string {
-        return detectTier(rateLimits);
-    }
+  async embeddings(
+    apiKey: string,
+    request: EmbeddingRequest,
+  ): Promise<EmbeddingResponse> {
+    return generateEmbeddings(apiKey, request);
+  }
 
-    async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
-        return completeChat(apiKey, request);
-    }
+  async generateImage(
+    _apiKey: string,
+    _request: ImageGenerationRequest,
+  ): Promise<ImageGenerationResponse> {
+    throw createTypedError(
+      "Image generation is not supported by Gemini API yet.",
+      501,
+      "gemini",
+    );
+  }
 
-    async embeddings(apiKey: string, request: EmbeddingRequest): Promise<EmbeddingResponse> {
-        return generateEmbeddings(apiKey, request);
-    }
+  async transcribeAudio(
+    _apiKey: string,
+    _request: AudioTranscriptionRequest,
+  ): Promise<AudioTranscriptionResponse> {
+    throw createTypedError(
+      "Audio transcription is not supported by Gemini API yet.",
+      501,
+      "gemini",
+    );
+  }
 
-    async generateImage(_apiKey: string, _request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
-        throw new Error('Image generation is not supported by Gemini API yet.');
-    }
-
-    async transcribeAudio(_apiKey: string, _request: AudioTranscriptionRequest): Promise<AudioTranscriptionResponse> {
-        throw new Error('Audio transcription is not supported by Gemini API yet.');
-    }
-
-    async textToSpeech(_apiKey: string, _request: TextToSpeechRequest): Promise<TextToSpeechResponse> {
-        throw new Error('Text to speech is not supported by Gemini API yet.');
-    }
+  async textToSpeech(
+    _apiKey: string,
+    _request: TextToSpeechRequest,
+  ): Promise<TextToSpeechResponse> {
+    throw createTypedError(
+      "Text to speech is not supported by Gemini API yet.",
+      501,
+      "gemini",
+    );
+  }
 }

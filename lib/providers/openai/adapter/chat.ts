@@ -1,18 +1,16 @@
 import { ChatRequest, ChatResponse } from "../../../models/workloads";
 import { createOpenAIClient } from "../client";
-import {
-  extractErrorCode,
-  createTypedError,
-  RateLimitError,
-} from "../../../core/errors";
+import { parseOpenAIError } from "./errors";
 
 /**
  * Model capability helpers
  * Keep these SMALL and obvious — move to model registry later.
  */
 function isReasoningModel(model: string): boolean {
-  // o1 and o3-mini are reasoning models
-  return model.startsWith("o1") || model.startsWith("o3-mini");
+  // o1, o3, o4 are reasoning models (o4 future-proof)
+  return (
+    model.startsWith("o1") || model.startsWith("o3") || model.startsWith("o4")
+  );
 }
 
 function requiresResponsesAPI(model: string): boolean {
@@ -20,10 +18,13 @@ function requiresResponsesAPI(model: string): boolean {
   if (model.includes("preview")) return false;
   if (model.includes("-mini")) return false;
 
-  // Only the full o1 models currently benefit/require specialized handling 
-  // that might be mapped to Responses API in some enterprise setups.
-  // Standard public API usually works with chat.completions for o1 now.
-  return model === "o1";
+  // Full reasoning models (o1, o3, o4) + image models require /v1/responses
+  return (
+    model.startsWith("o1") ||
+    model.startsWith("o3") ||
+    model.startsWith("o4") ||
+    model.startsWith("gpt-image")
+  );
 }
 
 /**
@@ -85,12 +86,12 @@ export async function completeChat(
       content: extractResponsesText(response),
       usage: response.usage
         ? {
-          promptTokens: response.usage.input_tokens,
-          completionTokens: response.usage.output_tokens,
-          totalTokens:
-            (response.usage.input_tokens || 0) +
-            (response.usage.output_tokens || 0),
-        }
+            promptTokens: response.usage.input_tokens,
+            completionTokens: response.usage.output_tokens,
+            totalTokens:
+              (response.usage.input_tokens || 0) +
+              (response.usage.output_tokens || 0),
+          }
         : undefined,
       model: response.model || modelId,
     };
@@ -135,57 +136,14 @@ export async function completeChat(
       content: choice?.message?.content || "",
       usage: casted.usage
         ? {
-          promptTokens: casted.usage.prompt_tokens,
-          completionTokens: casted.usage.completion_tokens,
-          totalTokens: casted.usage.total_tokens,
-        }
+            promptTokens: casted.usage.prompt_tokens,
+            completionTokens: casted.usage.completion_tokens,
+            totalTokens: casted.usage.total_tokens,
+          }
         : undefined,
       model: casted.model || request.model,
     };
   } catch (error: any) {
-    const status = error?.status ?? error?.response?.status;
-
-    const message = error?.message ?? String(error);
-
-    /**
-     * Transparent fallback:
-     * Some models silently force /v1/responses
-     */
-    if (
-      message.includes("v1/responses") &&
-      !requiresResponsesAPI(request.model)
-    ) {
-      try {
-        console.warn(
-          `[OpenAI] Forced Responses API fallback for model ${request.model}`,
-        );
-        return await useResponsesAPI(request.model, request);
-      } catch (fallbackError) {
-        error = fallbackError;
-      }
-    }
-
-    const retryAfterHeader =
-      error?.headers?.["retry-after"] ??
-      error?.response?.headers?.["retry-after"];
-
-    const retryAfterMs =
-      retryAfterHeader !== undefined
-        ? parseInt(retryAfterHeader, 10) * 1000
-        : undefined;
-
-    const formattedMessage = `OpenAI API Error ${status || "Unknown"
-      }: ${message}`;
-
-    if (status === 429 && retryAfterMs) {
-      throw new RateLimitError(formattedMessage, "openai", retryAfterMs);
-    }
-
-    const errorCode = extractErrorCode(message) ?? status;
-
-    throw createTypedError(formattedMessage, errorCode, "openai", {
-      modelId: request.model,
-      retryAfterMs,
-    });
+    throw parseOpenAIError(error, request.model);
   }
 }

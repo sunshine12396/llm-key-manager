@@ -12,6 +12,9 @@ const EXCLUDED_PATTERNS = [
 
 // Priority for model sorting (higher = more preferred)
 const MODEL_PRIORITY = [
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.0-pro", // Added
   "gemini-2.0-flash-thinking", // Thinking model
   "gemini-2.0-flash",
   "gemini-1.5-pro",

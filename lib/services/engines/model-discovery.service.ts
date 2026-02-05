@@ -6,7 +6,11 @@
  */
 
 import { db } from "../../db";
-import { AIProviderId, VerifiedModelMetadata, ModelCapability } from "../../models/types";
+import {
+  AIProviderId,
+  VerifiedModelMetadata,
+  ModelCapability,
+} from "../../models/types";
 
 export interface ModelFilter {
   provider?: string;
@@ -18,15 +22,21 @@ class ModelMetadataService {
   /**
    * Query available models based on rich filters
    */
-  async queryAvailableModels(filter: ModelFilter): Promise<VerifiedModelMetadata[]> {
+  async queryAvailableModels(
+    filter: ModelFilter,
+  ): Promise<VerifiedModelMetadata[]> {
     return db.modelCache
       .filter((m: VerifiedModelMetadata) => {
         if (!m.isAvailable) return false;
         if (filter.provider && m.providerId !== filter.provider) return false;
-        if (filter.priority !== undefined && (m.modelPriority || 0) < filter.priority) return false;
+        if (
+          filter.priority !== undefined &&
+          (m.modelPriority || 0) < filter.priority
+        )
+          return false;
         if (filter.capabilities && filter.capabilities.length > 0) {
           const modelCaps = m.capabilities || [];
-          return filter.capabilities.every(cap => modelCaps.includes(cap));
+          return filter.capabilities.every((cap) => modelCaps.includes(cap));
         }
         return true;
       })

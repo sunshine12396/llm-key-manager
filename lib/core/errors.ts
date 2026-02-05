@@ -110,6 +110,17 @@ export class QuotaExhaustedError extends LLMError {
 }
 
 /**
+ * Unsupported operation error (HTTP 501/400)
+ * Indicates the provider does not support the requested capability.
+ */
+export class UnsupportedOperationError extends LLMError {
+  constructor(message: string, provider?: AIProviderId) {
+    super(message, 501, provider, false);
+    this.name = "UnsupportedOperationError";
+  }
+}
+
+/**
  * Server error (HTTP 5xx)
  * Indicates an issue on the provider's side.
  */
@@ -241,6 +252,8 @@ export function createTypedError(
         options?.modelId ?? "unknown",
         provider,
       );
+    case 501:
+      return new UnsupportedOperationError(message, provider);
     default:
       if (code >= 500) {
         return new ServerError(message, code, provider);

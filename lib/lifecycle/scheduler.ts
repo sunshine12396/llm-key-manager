@@ -22,8 +22,9 @@ class LifecycleScheduler {
     {
       config: JobConfig;
       fn: JobFn;
-      timer: ReturnType<typeof setInterval> | null;
+      timer: ReturnType<typeof setTimeout> | null;
       isRunning: boolean;
+      shouldStop: boolean;
     }
   > = new Map();
 
@@ -36,12 +37,23 @@ class LifecycleScheduler {
     const job = {
       config,
       fn,
-      timer: null as ReturnType<typeof setInterval> | null,
+      timer: null as ReturnType<typeof setTimeout> | null,
       isRunning: false,
+      shouldStop: false,
+    };
+
+    const scheduleNext = () => {
+      if (job.shouldStop) return;
+
+      // Add 10% jitter to prevent thundering herd
+      const jitter = Math.floor(config.intervalMs * 0.1 * Math.random());
+      const effectiveInterval = config.intervalMs + jitter;
+
+      job.timer = setTimeout(execute, effectiveInterval);
     };
 
     const execute = async () => {
-      if (job.isRunning) return;
+      if (job.isRunning || job.shouldStop) return;
 
       // Basic visibility check
       if (
@@ -49,6 +61,7 @@ class LifecycleScheduler {
         typeof document !== "undefined" &&
         document.hidden
       ) {
+        scheduleNext();
         return;
       }
 
@@ -59,17 +72,16 @@ class LifecycleScheduler {
         console.error(`[Scheduler] Job ${config.id} failed:`, e);
       } finally {
         job.isRunning = false;
+        scheduleNext();
       }
     };
 
-    // Add 10% jitter to prevent thundering herd
-    const jitter = Math.floor(config.intervalMs * 0.1 * Math.random());
-    const effectiveInterval = config.intervalMs + jitter;
-    job.timer = setInterval(execute, effectiveInterval);
     this.jobs.set(config.id, job);
 
     if (config.runImmediately) {
       execute();
+    } else {
+      scheduleNext();
     }
   }
 
@@ -78,11 +90,14 @@ class LifecycleScheduler {
    */
   stopJob(id: string) {
     const job = this.jobs.get(id);
-    if (job?.timer) {
-      clearInterval(job.timer);
-      job.timer = null;
+    if (job) {
+      job.shouldStop = true;
+      if (job.timer) {
+        clearTimeout(job.timer);
+        job.timer = null;
+      }
+      this.jobs.delete(id);
     }
-    this.jobs.delete(id);
   }
 
   /**

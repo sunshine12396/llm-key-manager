@@ -13,8 +13,9 @@ const EXCLUDED_ID_PATTERNS = [
 
 // Priority for model sorting (higher = more preferred)
 const MODEL_PRIORITY = [
+  "o3", // Latest reasoning
   "o1", // Reasoning models
-  "o3-mini", // Latest mini reasoning
+  "gpt-4.5", // Latest GPT
   "gpt-4o",
   "gpt-4o-mini",
   "gpt-4-turbo",
@@ -23,7 +24,7 @@ const MODEL_PRIORITY = [
 ];
 
 // Patterns that identify OpenAI chat models
-const CHAT_MODEL_PREFIXES = ["gpt-", "o1", "o3"];
+const CHAT_MODEL_PREFIXES = ["gpt-", "o1", "o3", "o4"];
 
 export async function listModels(apiKey: string): Promise<string[]> {
   const client = createOpenAIClient(apiKey);
@@ -71,12 +72,13 @@ export async function listModels(apiKey: string): Promise<string[]> {
 
 export function ownsModel(modelId: string): boolean {
   const m = modelId.toLowerCase();
-  // Chat models: gpt-*, o1*, o3-mini*
+  // Chat models: gpt-*, o1*, o3*, o4* (future-proofing)
   // Multimodal: dall-e, whisper, text-embedding
   return (
     m.startsWith("gpt") ||
     m.startsWith("o1") ||
-    m.startsWith("o3-mini") ||
+    m.startsWith("o3") ||
+    m.startsWith("o4") ||
     m.startsWith("dall-e") ||
     m.startsWith("whisper") ||
     m.startsWith("text-embedding")

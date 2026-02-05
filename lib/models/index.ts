@@ -1,3 +1,2 @@
 // Re-export models and types
-export * from './types';
-
+export * from "./types";

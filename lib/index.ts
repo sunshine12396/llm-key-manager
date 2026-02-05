@@ -8,6 +8,7 @@
 // 1. Core APIs
 export { llmClient } from "./public/llm";
 export { vault } from "./public/vault";
+export { resilientHandler } from "./services/engines/resilience.engine";
 
 // 2. React Hooks
 export * from "./public/hooks";
@@ -26,4 +27,3 @@ export { UsageDashboard } from "./components/dashboard/UsageDashboard";
 export { ErrorLogs } from "./components/dashboard/ErrorLogs";
 export { AddKeyForm } from "./components/forms/AddKeyForm";
 export { EditKeyModal } from "./components/forms/EditKeyModal";
-

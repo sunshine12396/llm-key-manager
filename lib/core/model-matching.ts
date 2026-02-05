@@ -170,7 +170,7 @@ function fuzzyMatchOpenAI(
 ): string | null {
   // Extract base model name
   // 1. Try reasoning models first (o1, o3)
-  const reasoningPatterns = ["o1", "o3-mini"];
+  const reasoningPatterns = ["o1", "o3"];
   for (const base of reasoningPatterns) {
     if (requested.startsWith(base)) {
       // Find verified model with same base
@@ -180,7 +180,7 @@ function fuzzyMatchOpenAI(
   }
 
   // 2. Try GPT models
-  const gptPatterns = ["gpt-4o", "gpt-4", "gpt-3.5"];
+  const gptPatterns = ["gpt-4o", "gpt-4.5", "gpt-4", "gpt-3.5"];
   for (const base of gptPatterns) {
     if (requested.startsWith(base)) {
       // Find verified model with same base, preferring non-dated versions or newer ones
