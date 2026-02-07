@@ -1,0 +1,20 @@
+[
+    {
+        "id": "openai",
+        "name": "OpenAI",
+        "baseUrl": "https://api.openai.com/v1",
+        "website": "https://platform.openai.com"
+    },
+    {
+        "id": "anthropic",
+        "name": "Anthropic",
+        "baseUrl": "https://api.anthropic.com/v1",
+        "website": "https://console.anthropic.com"
+    },
+    {
+        "id": "gemini",
+        "name": "Google Gemini",
+        "baseUrl": "https://generativelanguage.googleapis.com",
+        "website": "https://aistudio.google.com"
+    }
+]

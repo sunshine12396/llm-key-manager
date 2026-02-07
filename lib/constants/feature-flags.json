@@ -1,0 +1,7 @@
+{
+    "enableMultiStepValidation": true,
+    "enableAutomaticDiscovery": true,
+    "enableSmartRouting": true,
+    "enableCostEstimation": true,
+    "enableQuotaHardLimits": false
+}
