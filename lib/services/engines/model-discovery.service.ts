@@ -221,12 +221,14 @@ class ModelMetadataService {
       .toArray();
 
     // 2. Also get models that are unavailable but have NO nextRetryAt (legacy or edge cases)
+    // IMPORTANT: We MUST exclude PERM_FAILED models as they should not be automatically retried
     if (due.length < limit) {
       const unset = await db.modelCache
         .filter(
           (m) =>
             !m.isAvailable &&
             m.nextRetryAt === null &&
+            m.state !== "PERM_FAILED" && // Exclude terminal failures
             !!m.keyId &&
             !/-\d{10,}$/.test(m.modelId),
         )

@@ -1,25 +1,17 @@
 import React, { useEffect, useState } from "react";
 import useLLMKeyManager from "../../hooks/useLLMKeyManager";
-import { ValidationEvent } from "../../lifecycle/validator.job";
-import {
-  CheckCircle,
-  XCircle,
-  Loader2,
-  X,
-  Database,
-  Key,
-  Wifi,
-  AlertCircle,
-  Zap,
-} from "lucide-react";
+import { ValidationEvent } from "../../services/validation/validation.types";
+
+import { CheckCircle, XCircle, Loader2, X, Zap } from "lucide-react";
+
 import { cn } from "../../utils/cn";
 import { Badge } from "../ui";
 
-interface ToastItem extends ValidationEvent {
+type ToastItem = ValidationEvent & {
   id: string;
   createdAt: number;
   autoDismiss: boolean;
-}
+};
 
 export const ValidationNotificationToast: React.FC = () => {
   const { validationEvents, dismissValidationEvent } = useLLMKeyManager();
@@ -40,8 +32,8 @@ export const ValidationNotificationToast: React.FC = () => {
                   ...t,
                   ...event,
                   autoDismiss:
-                    event.type === "validation_complete" ||
-                    event.type === "validation_failed",
+                    event.type === "validation:complete" ||
+                    event.type === "validation:error",
                 }
               : t,
           );
@@ -54,7 +46,7 @@ export const ValidationNotificationToast: React.FC = () => {
               id: `toast-${event.keyId}-${Date.now()}`,
               createdAt: Date.now(),
               autoDismiss: false,
-            },
+            } as ToastItem,
           ];
         }
       });
@@ -67,14 +59,14 @@ export const ValidationNotificationToast: React.FC = () => {
       .filter(
         (t) =>
           t.autoDismiss &&
-          (t.type === "validation_complete" || t.type === "validation_failed"),
+          (t.type === "validation:complete" || t.type === "validation:error"),
       )
       .map((toast) => {
         return setTimeout(
           () => {
             handleDismiss(toast.keyId);
           },
-          toast.type === "validation_complete" ? 5000 : 8000,
+          toast.type === "validation:complete" ? 5000 : 8000,
         ); // Success: 5s, Failure: 8s
       });
 
@@ -86,35 +78,23 @@ export const ValidationNotificationToast: React.FC = () => {
     dismissValidationEvent(keyId);
   };
 
-  const getErrorIcon = (errorType?: string) => {
-    switch (errorType) {
-      case "authentication_failed":
-        return <Key className="h-5 w-5" />;
-      case "network_error":
-        return <Wifi className="h-5 w-5" />;
-      case "no_models":
-        return <Database className="h-5 w-5" />;
-      case "quota_exceeded":
-        return <AlertCircle className="h-5 w-5" />;
-      default:
-        return <XCircle className="h-5 w-5" />;
-    }
-  };
-
   const getToastConfig = (toast: ToastItem) => {
     switch (toast.type) {
-      case "validation_started":
-      case "validation_progress":
+      case "validation:start":
+      case "validation:model":
         return {
           icon: <Loader2 className="h-5 w-5 animate-spin" />,
           title: "Validating API Key...",
-          subtitle: `Discovering models for ${toast.label}`,
+          subtitle:
+            toast.type === "validation:model"
+              ? `Verified ${toast.model}`
+              : `Discovering models for ${toast.label}`,
           color: "bg-white border-indigo-200",
           iconBg: "bg-indigo-100 text-indigo-600",
-          progress: toast.progress || 0,
+          progress: toast.type === "validation:model" ? 50 : 10,
         };
-      case "validation_complete":
-        const modelCount = toast.result?.models.length || 0;
+      case "validation:complete":
+        const modelCount = (toast as any).modelsFound || 0;
         return {
           icon: <CheckCircle className="h-5 w-5" />,
           title: "Key Validated Successfully",
@@ -123,16 +103,12 @@ export const ValidationNotificationToast: React.FC = () => {
           iconBg: "bg-emerald-100 text-emerald-600",
           progress: 100,
         };
-      case "validation_failed":
+      case "validation:error":
+        const error = (toast as any).error as Error;
         return {
-          icon: toast.result?.errorType ? (
-            getErrorIcon(toast.result.errorType)
-          ) : (
-            <XCircle className="h-5 w-5" />
-          ),
+          icon: <XCircle className="h-5 w-5" />,
           title: "Validation Failed",
-          subtitle:
-            toast.result?.errorMessage || `Unable to validate ${toast.label}`,
+          subtitle: error?.message || `Unable to validate ${toast.label}`,
           color: "bg-white border-red-200",
           iconBg: "bg-red-100 text-red-600",
           progress: 100,
@@ -141,7 +117,7 @@ export const ValidationNotificationToast: React.FC = () => {
         return {
           icon: <Zap className="h-5 w-5" />,
           title: "Processing...",
-          subtitle: toast.label,
+          subtitle: (toast as any).label || "Unknown Key",
           color: "bg-white border-slate-200",
           iconBg: "bg-slate-100 text-slate-600",
           progress: 0,
@@ -165,8 +141,8 @@ export const ValidationNotificationToast: React.FC = () => {
             )}
           >
             {/* Progress bar */}
-            {(toast.type === "validation_started" ||
-              toast.type === "validation_progress") && (
+            {(toast.type === "validation:start" ||
+              toast.type === "validation:model") && (
               <div className="absolute top-0 left-0 right-0 h-1 bg-slate-100">
                 <div
                   className="h-full bg-indigo-500 transition-all duration-500 ease-out"
@@ -190,50 +166,26 @@ export const ValidationNotificationToast: React.FC = () => {
                     {config.title}
                   </p>
                   <Badge variant="slate" size="sm" className="text-[8px]">
-                    {toast.providerId.toUpperCase()}
+                    {toast.provider.toUpperCase()}
                   </Badge>
                 </div>
                 <p className="text-xs text-slate-500 mt-1 truncate">
                   {config.subtitle}
                 </p>
 
-                {/* Model list preview for success */}
-                {toast.type === "validation_complete" &&
-                  toast.result?.models &&
-                  toast.result.models.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {toast.result.models.slice(0, 3).map((model) => (
-                        <Badge
-                          key={model}
-                          variant="emerald"
-                          size="sm"
-                          className="text-[8px] font-mono"
-                        >
-                          {model.split("/").pop()?.substring(0, 15)}
-                        </Badge>
-                      ))}
-                      {toast.result.models.length > 3 && (
-                        <Badge variant="slate" size="sm" className="text-[8px]">
-                          +{toast.result.models.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
-                  )}
+                {/* Success summary */}
+                {toast.type === "validation:complete" && (
+                  <div className="mt-2 text-[10px] text-emerald-600 font-medium">
+                    Verified and indexed {toast.modelsFound} models
+                  </div>
+                )}
 
                 {/* Error guidance for failures */}
-                {toast.type === "validation_failed" &&
-                  toast.result?.errorType && (
-                    <p className="text-[10px] text-red-500 mt-2 font-medium">
-                      {toast.result.errorType === "authentication_failed" &&
-                        "Check your API key credentials"}
-                      {toast.result.errorType === "network_error" &&
-                        "Check your internet connection"}
-                      {toast.result.errorType === "no_models" &&
-                        "Key may have restricted permissions"}
-                      {toast.result.errorType === "quota_exceeded" &&
-                        "API quota exceeded, try again later"}
-                    </p>
-                  )}
+                {toast.type === "validation:error" && (
+                  <p className="text-[10px] text-red-500 mt-2 font-medium">
+                    Please check your credentials and try again.
+                  </p>
+                )}
               </div>
 
               {/* Dismiss button */}

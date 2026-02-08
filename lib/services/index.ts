@@ -2,7 +2,8 @@
 export { vaultService } from "./vault/vault.service";
 export { resilientHandler } from "./engines/resilience.engine";
 export { analyticsService, type ErrorLogEntry } from "./analytics.service";
-export { validatorJob as backgroundValidator } from "../lifecycle/validator.job";
+export { validatorService } from "./validation/validator.service";
+
 export { llmClient } from "../core/unified-llm.client";
 export { CryptoService } from "./vault/crypto.service";
 export { keyRouter } from "./engines/routing.engine";

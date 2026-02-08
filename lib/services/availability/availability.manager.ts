@@ -20,7 +20,7 @@ import {
   calculateQuotaRetry,
   type RetryDecision,
 } from "./retry-strategy";
-import { safetyGuard } from "./safety-guard";
+import { safetyGuard } from "../safety";
 
 // ============================================
 // MODEL PRIORITY CONFIGURATION
@@ -127,11 +127,11 @@ export class KeyModelAvailabilityManager {
       // 2. Clear any circuit breakers for this key
       safetyGuard.recordKeySuccess(keyId);
 
-      // 3. The actual check should be performed by the validator job
+      // 3. The actual check should be performed by the validator service
       // to avoid duplicate logic and circular dependencies.
-      // We'll import it dynamically to avoid issues.
-      const { validatorJob } = await import("../../lifecycle/validator.job");
-      await validatorJob.retryKeyModels(keyId, [modelId]);
+      const { validatorService } =
+        await import("../validation/validator.service");
+      await validatorService.queueValidation(keyId, 2); // Priority 2 = High (User triggered)
     } catch (e) {
       console.error(
         `[Availability] Manual revalidation failed for ${modelId}:`,
@@ -161,17 +161,26 @@ export class KeyModelAvailabilityManager {
     candidateModels: string[],
   ): Promise<void> {
     const now = Date.now();
-    const entries: VerifiedModelMetadata[] = candidateModels.map((modelId) => ({
-      modelId,
-      providerId,
-      keyId,
-      isAvailable: false, // Start as unavailable until validated
-      state: "NEW" as ModelState, // Use state machine
-      lastCheckedAt: 0, // Never checked
-      modelPriority: this.getModelPriority(modelId),
-      retryCount: 0,
-      nextRetryAt: now, // Ready for immediate validation
-    }));
+    // Get existing models to avoid overwriting current status
+    const existing = await db.modelCache.where("keyId").equals(keyId).toArray();
+    const existingMap = new Map(existing.map((m) => [m.modelId, m]));
+
+    const entries: VerifiedModelMetadata[] = candidateModels.map((modelId) => {
+      const current = existingMap.get(modelId);
+      if (current) return current; // Keep existing status
+
+      return {
+        modelId,
+        providerId,
+        keyId,
+        isAvailable: false,
+        state: "NEW" as ModelState,
+        lastCheckedAt: 0,
+        modelPriority: this.getModelPriority(modelId),
+        retryCount: 0,
+        nextRetryAt: now,
+      };
+    });
 
     await db.modelCache.bulkPut(entries);
     console.log(
@@ -348,6 +357,7 @@ export class KeyModelAvailabilityManager {
     let newState: ModelState = retryDecision.nextState;
     const newRetryCount = existing.retryCount + 1;
 
+    // Transition model status
     await db.modelCache.update([modelId, keyId], {
       isAvailable: false,
       state: newState,
@@ -357,6 +367,28 @@ export class KeyModelAvailabilityManager {
       errorMessage: retryDecision.reason, // Include retry reasoning
       lastCheckedAt: Date.now(),
     });
+
+    // ============================================
+    // FLOW CORRECTNESS: Propagate to Key Status
+    // ============================================
+    // If we get a fatal error (401/403), we should mark the WHOLE key as invalid
+    // so the dashboard reflects reality immediately.
+    if (
+      newState === "PERM_FAILED" &&
+      (errorCode === 401 || errorCode === 403)
+    ) {
+      const { vaultService } = await import("../vault/vault.service");
+      await vaultService.updateKey(keyId, {
+        verificationStatus: "invalid",
+      });
+    } else if (newState === "COOLDOWN" && errorCode === 429) {
+      // If a key starts getting 429s, mark it as retry_scheduled at the key level too
+      const { vaultService } = await import("../vault/vault.service");
+      await vaultService.updateKey(keyId, {
+        verificationStatus: "retry_scheduled",
+        retryAfter: retryDecision.nextRetryAt || undefined,
+      });
+    }
 
     console.log(
       `[Availability] ${modelId} -> ${newState} | ${retryDecision.reason}`,

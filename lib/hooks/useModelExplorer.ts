@@ -1,9 +1,10 @@
-import { backgroundValidator } from '../services';
+import { validatorService } from "../services/validation/validator.service";
 
 export function useModelExplorer() {
-    return {
-        getAvailableModels: backgroundValidator.getAllAvailableModels.bind(backgroundValidator),
-        getModelsForKey: backgroundValidator.getModelsForKey.bind(backgroundValidator),
-        isModelAvailable: backgroundValidator.isModelAvailable.bind(backgroundValidator)
-    };
+  return {
+    getAvailableModels:
+      validatorService.getAllAvailableModels.bind(validatorService),
+    getModelsForKey: validatorService.getModelsForKey.bind(validatorService),
+    isModelAvailable: validatorService.isModelAvailable.bind(validatorService),
+  };
 }

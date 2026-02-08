@@ -1,11 +1,5 @@
-/**
- * Background Jobs Orchestrator
- *
- * Central registry for all async background lifecycles.
- */
-
 import { scheduler } from "./scheduler";
-import { validatorJob } from "./validator.job";
+import { validatorService } from "../services/validation/validator.service";
 
 class BackgroundJobsManager {
   private static instance: BackgroundJobsManager;
@@ -33,7 +27,7 @@ class BackgroundJobsManager {
     console.log("[BackgroundJobs] Initializing lifecycle services...");
 
     // 1. Resume any interrupted validations from last session
-    await validatorJob.resumePendingValidations();
+    await validatorService.resumePendingValidations();
 
     // 2. Schedule the Model Recovery Job
     // Retries unavailable models every 5 minutes
@@ -45,7 +39,7 @@ class BackgroundJobsManager {
         pauseOnHidden: true,
       },
       async () => {
-        const result = await validatorJob.retryUnavailableModels();
+        const result = await validatorService.retryUnavailableModels();
         if (result.recovered > 0) {
           console.log(
             `[BackgroundJobs] Recovered ${result.recovered} models during periodic check.`,
@@ -67,7 +61,7 @@ class BackgroundJobsManager {
           );
           // Trigger model recovery immediately when user returns
           try {
-            const result = await validatorJob.retryUnavailableModels();
+            const result = await validatorService.retryUnavailableModels();
             if (result.recovered > 0) {
               console.log(
                 `[BackgroundJobs] Visibility recovery: ${result.recovered} models restored.`,
@@ -92,6 +86,3 @@ class BackgroundJobsManager {
 }
 
 export const backgroundJobs = BackgroundJobsManager.getInstance();
-
-// Re-export specific jobs for convenience
-export { validatorJob };

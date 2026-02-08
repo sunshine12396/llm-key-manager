@@ -1,40 +1,27 @@
+/**
+ * Resilience Engine
+ *
+ * Provides resilient API request handling with:
+ * - Key resolution via keyResolver (uses availability cache)
+ * - Circuit breaker integration via safetyGuard
+ * - Retry logic via retryService
+ * - Error handling and key rotation
+ *
+ * Phase 6 Refactoring: Simplified to use keyResolver instead of manual key iteration
+ */
+
 import { KeyMetadata, AIProviderId } from "../../models/metadata";
 import { vaultService } from "../vault/vault.service";
-import { safetyGuard } from "../availability/safety-guard"; // Use new SafetyGuard
-import { type CircuitState } from "../availability/safety-guard";
+import { safetyGuard, type CircuitState } from "../safety";
 import { retryService } from "../policies/retry.policy";
-import { keyRouter } from "./routing.engine";
 import { quotaManager } from "../policies/quota.policy";
 import { extractErrorCode } from "../../core/errors";
+import { keyResolver } from "../availability";
+import { availabilityManager } from "../availability";
 
-/**
- * Provider-specific rate limit configurations
- * These are default retry times when the API doesn't provide a specific retry-after value
- */
-const PROVIDER_RATE_LIMIT_DEFAULTS: Record<
-  AIProviderId,
-  {
-    defaultRetryMs: number; // Default retry time for generic 429
-    quotaExhaustedRetryMs: number; // Retry time when quota is exhausted (usually longer)
-    dailyLimitRetryMs: number; // Retry time for daily limit hit
-  }
-> = {
-  gemini: {
-    defaultRetryMs: 60_000, // 1 minute for RPM limits
-    quotaExhaustedRetryMs: 60_000, // 1 minute for free tier (resets per-minute)
-    dailyLimitRetryMs: 86_400_000, // 24 hours for daily quota
-  },
-  openai: {
-    defaultRetryMs: 60_000, // 1 minute for RPM/TPM limits
-    quotaExhaustedRetryMs: 3_600_000, // 1 hour for quota
-    dailyLimitRetryMs: 86_400_000, // 24 hours for daily limits
-  },
-  anthropic: {
-    defaultRetryMs: 60_000, // 1 minute for rate limits
-    quotaExhaustedRetryMs: 3_600_000, // 1 hour for quota
-    dailyLimitRetryMs: 86_400_000, // 24 hours for daily limits
-  },
-};
+// ============================================
+// TYPES
+// ============================================
 
 interface RequestOptions {
   maxRetries?: number;
@@ -52,70 +39,30 @@ interface APIResponse<T> {
   duration?: number;
 }
 
+// ============================================
+// RESILIENT REQUEST HANDLER
+// ============================================
+
 /**
  * Resilient Request Handler
- * Combines circuit breaker, retry, and key routing for robust API calls.
+ * Combines circuit breaker, retry, and key resolution for robust API calls.
+ *
+ * Simplified flow:
+ * 1. Use keyResolver for fast key selection (O(1) cache lookup)
+ * 2. Execute request with retry
+ * 3. Handle errors and update availability
  */
 export class ResilientRequestHandler {
   /**
-   * Check if a key is currently rate-limited based on retryAfter timestamp
-   */
-  private isRateLimited(key: KeyMetadata): boolean {
-    if (!key.retryAfter) return false;
-    const now = Date.now();
-    if (now < key.retryAfter) {
-      const waitSecs = Math.ceil((key.retryAfter - now) / 1000);
-      console.log(
-        `[RateLimitSkip] Key ${key.label} is rate-limited. Retry in ${waitSecs}s. Skipping.`,
-      );
-      return true;
-    }
-    return false;
-  }
-  /**
-   * Helper: Check if a key is usable
-   */
-  private isKeyUsable(
-    key: KeyMetadata,
-    skipCircuitBreaker: boolean,
-    skipReasons: any,
-  ): boolean {
-    // Check global/manual key disable
-    if (safetyGuard.isKeyDisabled(key.id)) {
-      return false;
-    }
-
-    // Check rate-limit (retryAfter timestamp)
-    if (this.isRateLimited(key)) {
-      const retryIn = Math.ceil((key.retryAfter! - Date.now()) / 1000);
-      skipReasons.rateLimited.push({ label: key.label, retryIn });
-      return false;
-    }
-
-    // Check circuit breaker (SafetyGuard)
-    if (!skipCircuitBreaker && safetyGuard.isKeyCircuitOpen(key.id)) {
-      skipReasons.circuitOpen.push(key.label);
-      return false;
-    }
-
-    // Check quota
-    if (!quotaManager.hasAvailableQuota(key.id)) {
-      skipReasons.quotaExhausted.push(key.label);
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
    * Execute a request with full resilience features
+   * Uses keyResolver for efficient key selection
    */
   async executeRequest<T>(
     providerId: AIProviderId,
     requestFn: (apiKey: string, key: KeyMetadata) => Promise<T>,
     options: RequestOptions = {},
   ): Promise<APIResponse<T>> {
-    // Global Safety Check: Is provider disabled?
+    // 1. Global Safety Check: Is provider disabled?
     if (safetyGuard.isProviderDisabled(providerId)) {
       return {
         success: false,
@@ -126,63 +73,50 @@ export class ResilientRequestHandler {
       };
     }
 
-    const allKeys = await vaultService.listKeys(providerId);
-    // Exclude revoked and disabled keys
-    const keys = allKeys.filter((k) => !k.isRevoked && k.isEnabled !== false);
+    if (safetyGuard.isProviderCircuitOpen(providerId)) {
+      return {
+        success: false,
+        attempts: 0,
+        error: new Error(
+          `Provider ${providerId} circuit breaker is OPEN. Please wait before retrying.`,
+        ),
+      };
+    }
 
-    const triedKeys: string[] = [];
+    const excludedKeys: string[] = [];
     let lastError: Error | undefined;
     let totalAttempts = 0;
+    const maxKeys = 5; // Limit key attempts to prevent infinite loops
 
-    // Track skip reasons for better error messages
-    const skipReasons = {
-      rateLimited: [] as { label: string; retryIn: number }[],
-      circuitOpen: [] as string[],
-      quotaExhausted: [] as string[],
-      noMatchingModels: [] as string[],
-    };
-
-    while (triedKeys.length < keys.length) {
-      // Select next best key
-      const selectedKey = keyRouter.selectKey(
-        keys,
+    // 2. Key Selection Loop
+    while (excludedKeys.length < maxKeys) {
+      // Use keyResolver for fast key selection
+      const resolved = await keyResolver.resolve(options.modelId || "", {
         providerId,
-        triedKeys,
-        options.modelId,
-      );
+        excludeKeyIds: excludedKeys,
+      });
 
-      if (!selectedKey) {
-        break;
+      if (!resolved) {
+        break; // No more keys available
       }
 
-      // Check usability
-      if (
-        !this.isKeyUsable(
-          selectedKey,
-          !!options.skipCircuitBreaker,
-          skipReasons,
-        )
-      ) {
-        triedKeys.push(selectedKey.id);
-        continue;
-      }
+      excludedKeys.push(resolved.keyId);
+      totalAttempts++;
 
       try {
-        // Get decrypted key
-        const apiKey = await vaultService.getKey(selectedKey.id);
         const startTime = Date.now();
 
         // Execute with retry & timeout
         const result = await retryService.execute(
           () =>
             this.withTimeout(
-              requestFn(apiKey, selectedKey),
+              requestFn(resolved.apiKey, resolved.keyMetadata),
               options.timeout || 60000,
             ),
           {
             onRetry: (attempt, delay, error) => {
               console.log(
-                `Retry ${attempt} for key ${selectedKey.label} after ${delay}ms: ${error.message}`,
+                `Retry ${attempt} for key ${resolved.keyMetadata.label} after ${delay}ms: ${error.message}`,
               );
             },
             shouldRetry: (error) => {
@@ -200,19 +134,20 @@ export class ResilientRequestHandler {
         );
 
         const duration = Date.now() - startTime;
-        totalAttempts += result.attempts;
+        totalAttempts += result.attempts - 1; // Adjust for initial attempt
 
-        // Update persistent stats (latency, usage count)
+        // Update persistent stats
         vaultService
-          .updateUsageStats(selectedKey.id, duration, result.success)
+          .updateUsageStats(resolved.keyId, duration, result.success)
           .catch(console.error);
 
+        // Record quota usage if available
         if (result.success && result.data && (result.data as any).usage) {
           const usage = (result.data as any).usage;
           const usedModel = (result.data as any).model;
           quotaManager.recordUsage(
-            selectedKey.id,
-            selectedKey.providerId,
+            resolved.keyId,
+            resolved.providerId,
             usage.promptTokens || 0,
             usage.completionTokens || 0,
             usedModel,
@@ -220,82 +155,39 @@ export class ResilientRequestHandler {
         }
 
         if (result.success) {
-          // Record success to SafetyGuard
-          safetyGuard.recordKeySuccess(selectedKey.id);
-          keyRouter.recordSuccess(selectedKey.id);
-
-          // Mark key as healthy for rotation system
-          keyRouter.markHealthy(selectedKey.id, selectedKey.providerId);
-
-          // Clear rate-limit flag on success (key recovered)
-          if (selectedKey.retryAfter) {
-            vaultService
-              .updateKey(selectedKey.id, { retryAfter: undefined })
-              .catch(console.error);
-          }
+          // Record success
+          safetyGuard.recordKeySuccess(resolved.keyId);
+          keyResolver.markSuccess(
+            resolved.keyId,
+            resolved.modelId,
+            resolved.providerId,
+          );
 
           return {
             success: true,
             data: result.data,
-            keyUsed: selectedKey.id,
+            keyUsed: resolved.keyId,
             attempts: totalAttempts,
             duration,
           };
         } else {
           lastError = result.error || new Error("Unknown error");
-          await this.handleError(selectedKey, lastError);
-          triedKeys.push(selectedKey.id);
+          await this.handleError(resolved.keyMetadata, lastError);
         }
       } catch (error) {
         totalAttempts++;
         lastError = error instanceof Error ? error : new Error(String(error));
-
-        // Check if it's a "no matching models" error
-        if (lastError.message.includes("no verified models")) {
-          skipReasons.noMatchingModels.push(selectedKey.label);
-        }
-
-        await this.handleError(selectedKey, lastError);
-        triedKeys.push(selectedKey.id);
+        await this.handleError(resolved.keyMetadata, lastError);
       }
     }
 
-    // Build informative error message
-    let errorMessage = "No available keys";
-    const parts: string[] = [];
-
-    if (keys.length === 0) {
-      errorMessage = `No ${providerId} keys configured. Please add a key in the vault.`;
-    } else {
-      if (skipReasons.rateLimited.length > 0) {
-        const shortest = Math.min(
-          ...skipReasons.rateLimited.map((r) => r.retryIn),
-        );
-        parts.push(
-          `${skipReasons.rateLimited.length} key(s) rate-limited (retry in ${shortest}s)`,
-        );
-      }
-      if (skipReasons.quotaExhausted.length > 0) {
-        parts.push(
-          `${skipReasons.quotaExhausted.length} key(s) quota exhausted`,
-        );
-      }
-      if (skipReasons.circuitOpen.length > 0) {
-        parts.push(
-          `${skipReasons.circuitOpen.length} key(s) circuit-breaker open`,
-        );
-      }
-      if (skipReasons.noMatchingModels.length > 0) {
-        parts.push(
-          `${skipReasons.noMatchingModels.length} key(s) have no matching models`,
-        );
-      }
-
-      if (parts.length > 0) {
-        errorMessage = `All ${providerId} keys unavailable: ${parts.join(", ")}`;
-      } else if (lastError) {
-        errorMessage = lastError.message;
-      }
+    // 3. Build informative error message
+    let errorMessage = `No available keys for provider ${providerId}`;
+    if (options.modelId) {
+      errorMessage = `No available keys for model ${options.modelId} on ${providerId}`;
+    }
+    if (lastError) {
+      errorMessage = lastError.message;
     }
 
     return {
@@ -305,6 +197,9 @@ export class ResilientRequestHandler {
     };
   }
 
+  /**
+   * Execute with timeout
+   */
   private async withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     let timer: ReturnType<typeof setTimeout>;
     const timeout = new Promise<never>((_, reject) => {
@@ -330,7 +225,6 @@ export class ResilientRequestHandler {
     isHealthy: boolean;
   }> {
     return keys.map((key) => {
-      // Use SafetyGuard for circuit state
       const circuitState = safetyGuard.getKeyCircuitState(key.id);
       const quotaUsage = quotaManager.getUsagePercentage(key.id);
       const isDisabled = safetyGuard.isKeyDisabled(key.id);
@@ -350,114 +244,66 @@ export class ResilientRequestHandler {
   }
 
   /**
-   * Handle errors encountered during request execution
+   * Handle errors - update availability and safety state
    */
   private async handleError(key: KeyMetadata, error: Error): Promise<void> {
     const errorMsg = error.message || "";
     const errorCode = extractErrorCode(errorMsg);
-    let errorType:
-      | "rate_limit"
-      | "auth"
-      | "server"
-      | "network"
-      | "quota"
-      | "unknown" = "unknown";
 
-    // 1. Handle Rate Limits (429) -> Record Failure (SafetyGuard handles threshold)
+    // 1. Handle Rate Limits (429)
     if (errorCode === 429) {
-      const providerDefaults = PROVIDER_RATE_LIMIT_DEFAULTS[key.providerId];
+      console.warn(`Key ${key.label} hit rate limit. Marking unavailable...`);
+      safetyGuard.recordKeyFailure(key.id, key.providerId);
+      keyResolver.markFailure(key.id, "");
 
-      // Determine the type of rate limit from error message
-      const isDailyLimit =
-        errorMsg.includes("PerDay") ||
-        errorMsg.includes("daily") ||
-        errorMsg.includes("per day");
-      const isQuotaExhausted =
-        errorMsg.includes("insufficient_quota") ||
-        errorMsg.includes("limit: 0") ||
-        errorMsg.includes("quota");
-
-      // Only set retryAfter cooldown for quota exhaustion (no models available)
-      // For simple rate limits, just skip to next key without persistent cooldown
-      if (isQuotaExhausted || isDailyLimit) {
-        // Parse retryAfter from error message
-        let retryAfterMs: number;
-        const retryMatch = errorMsg.match(/retry in ([\d.]+)s/i);
-        const delayMatch = errorMsg.match(/"retryDelay"\s*:\s*"(\d+)s"/i);
-
-        if (retryMatch) {
-          retryAfterMs = Math.ceil(parseFloat(retryMatch[1]) * 1000);
-        } else if (delayMatch) {
-          retryAfterMs = parseInt(delayMatch[1]) * 1000;
-        } else {
-          retryAfterMs = isDailyLimit
-            ? providerDefaults.dailyLimitRetryMs
-            : providerDefaults.quotaExhaustedRetryMs;
-        }
-
-        const retryAfterTimestamp = Date.now() + retryAfterMs;
-        errorType = "quota";
-        console.warn(
-          `Key ${key.label} has Exhausted Quota. Marking unavailable for ${retryAfterMs / 1000}s...`,
-        );
-
-        // Record to Safety Guard
-        safetyGuard.recordKeyFailure(key.id, key.providerId);
-        keyRouter.recordError(key.id);
-
-        // Trigger automatic key rotation
-        keyRouter.markRateLimited(key.id, key.providerId, retryAfterMs);
-
-        await vaultService.updateKey(key.id, {
-          retryAfter: retryAfterTimestamp,
-        });
-      } else {
-        // Simple rate limit
-        errorType = "rate_limit";
-        console.warn(
-          `Key ${key.label} hit rate limit. Switching to next key...`,
-        );
-        // Record to Safety Guard
-        safetyGuard.recordKeyFailure(key.id, key.providerId);
-        keyRouter.recordError(key.id);
-      }
-    }
-    // 2. Handle Quota/Auth (401/403) -> Revoke or Disable
-    else if (errorCode === 401 || errorCode === 403) {
-      errorType = "auth";
-      console.warn(
-        `Key ${key.label} Auth/Quota Failed: ${errorMsg}. Revoking...`,
+      // Use availabilityManager for consistent state updates
+      await availabilityManager.handleRuntimeError(
+        key.id,
+        "", // modelId unknown for generic requests
+        errorCode,
+        errorMsg,
       );
+    }
+    // 2. Handle Auth errors (401/403) -> Revoke
+    else if (errorCode === 401 || errorCode === 403) {
+      console.warn(`Key ${key.label} Auth Failed. Revoking...`);
       await vaultService.revokeKey(key.id);
       quotaManager.setLimit(key.id, 0);
       await vaultService.updateKey(key.id, { verificationStatus: "invalid" });
-      // Also record failure to trip circuit if needed (though revoking is stronger)
       safetyGuard.recordKeyFailure(key.id, key.providerId);
     }
-    // 3. Other Errors (5xx, Network) -> Record error to deprioritize
+    // 3. Other Errors (5xx, Network)
     else {
-      errorType = errorMsg.toLowerCase().includes("timeout")
-        ? "network"
-        : "server";
       safetyGuard.recordKeyFailure(key.id, key.providerId);
-      // Also record to provider circuit
       safetyGuard.recordProviderFailure(key.providerId);
-      keyRouter.recordError(key.id);
+      keyResolver.markFailure(key.id, "");
     }
 
-    // Persistent analytics logging
+    // Analytics logging
     try {
       const { analyticsService } = await import("../analytics.service");
       await analyticsService.recordError({
         keyId: key.id,
         providerId: key.providerId,
-        errorType,
+        errorType: this.categorizeError(errorCode),
         message: errorMsg,
         retryCount: 0,
       });
-    } catch (e) {
-      console.error("Analytics recording failed", e);
+    } catch {
+      // Ignore analytics errors
     }
+  }
+
+  /**
+   * Categorize error type from error code
+   */
+  private categorizeError(
+    errorCode: number | null,
+  ): "rate_limit" | "auth" | "server" | "network" | "quota" | "unknown" {
+    if (errorCode === 429) return "rate_limit";
+    if (errorCode === 401 || errorCode === 403) return "auth";
+    if (errorCode && errorCode >= 500) return "server";
+    return "unknown";
   }
 }
 

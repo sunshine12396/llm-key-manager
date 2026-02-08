@@ -116,7 +116,7 @@ export function matchModelsToVerified(
  * Provider-specific fuzzy matching for model names.
  * Handles naming variations across provider model versions.
  */
-function fuzzyMatchModel(
+export function fuzzyMatchModel(
   requested: string,
   verifiedModels: string[],
   providerId: AIProviderId,

@@ -13,11 +13,10 @@ import {
 import { resilientHandler } from "../services/engines/resilience.engine";
 import { getProviderAdapter, resolveProviderId } from "../providers";
 import { AIProviderId, LLMManagerConfig } from "../models/metadata";
-import { availabilityManager } from "../services/availability";
+import { availabilityManager, keyResolver } from "../services/availability";
 import { configService } from "../services/config.service";
 import { modelDataService } from "../services/model-data.service";
-import { extractErrorCode, LLMError } from "./errors";
-import { matchModelsToVerified } from "./model-matching";
+import { extractErrorCode } from "./errors";
 
 export class UnifiedLLMClient {
   // Optimization: Remember the model/provider that actually worked to avoid re-running fallbacks
@@ -42,224 +41,149 @@ export class UnifiedLLMClient {
     request: ChatRequest,
     options?: { providerId?: AIProviderId; timeout?: number },
   ): Promise<ChatResponse> {
-    // 1. Determine the capability category (for stickiness)
     const capabilityKey = request.model;
-
-    // 2. Determine the chain of models to try
     let fullModelChain: string[] = [];
 
-    // Check dynamic config fallback chains first
+    // 1. Resolve Chain
     const customChain = configService.getFallbackChain(request.model);
-
     if (customChain) {
       fullModelChain = [...customChain];
     } else if (modelDataService.getFallbackChain(request.model)) {
       fullModelChain = [...modelDataService.getFallbackChain(request.model)!];
     } else {
-      // Check dynamic config for aliases first, then data-driven defaults
       const customAlias = configService.getCustomAlias(request.model);
       const mapped = customAlias || modelDataService.getAlias(request.model);
       fullModelChain = [mapped];
     }
 
-    // Apply Stickiness: If we have a working model for this capability, try it FIRST
+    // 2. Apply Stickiness
     const sticky = this.stickyModels.get(capabilityKey);
     if (sticky && !options?.providerId) {
-      // Remove from chain if it exists, and prepend to start
       fullModelChain = [
         sticky.modelId,
         ...fullModelChain.filter((m) => m !== sticky.modelId),
       ];
     }
 
-    // 3. Identify unique providers in the chain in order of appearance
-    const providersInOrder: AIProviderId[] = [];
-    for (const modelId of fullModelChain) {
-      const p = this.inferProvider(modelId);
-      if (p && !providersInOrder.includes(p)) {
-        if (options?.providerId && p !== options.providerId) continue;
-        providersInOrder.push(p);
-      }
-    }
-
-    let totalAttempts = 0;
+    // 3. Execution Loop
+    const excludedKeys: string[] = [];
     let lastError: Error | null = null;
+    let totalAttempts = 0;
 
-    // 4. Iterate through Providers
-    for (const providerId of providersInOrder) {
-      const providerModels = fullModelChain.filter(
-        (m) => this.inferProvider(m) === providerId,
-      );
+    for (const modelId of fullModelChain) {
+      // Loop until we exhaust keys for this model
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        // Find best key for this model
+        const resolved = await keyResolver.resolve(modelId, {
+          providerId: options?.providerId,
+          excludeKeyIds: excludedKeys,
+        });
 
-      try {
-        const result = await resilientHandler.executeRequest(
-          providerId,
-          async (apiKey, keyMetadata) => {
-            let keyLastError: Error | null = null;
+        if (!resolved) {
+          // No more keys for this model, move to next model in chain
+          break;
+        }
 
-            // Use extracted model matching utility
-            const matchResult = matchModelsToVerified(
-              providerModels,
-              keyMetadata,
-              providerId,
-            );
+        totalAttempts++;
+        try {
+          const adapter = getProviderAdapter(resolved.providerId);
 
-            // Log all messages from matching
-            matchResult.logMessages.forEach((msg) => {
-              if (msg.includes("[Strict Mode]")) {
-                console.warn(msg);
-              } else {
-                console.log(msg);
-              }
-            });
+          const start = Date.now();
+          const response = await adapter.chat(resolved.apiKey, {
+            ...request,
+            model: resolved.modelId,
+          });
+          const duration = Date.now() - start;
 
-            const modelsToTry = matchResult.modelsToTry;
+          // Success Handling
+          availabilityManager
+            .markModelAvailable(resolved.keyId, resolved.modelId)
+            .catch(() => {});
+          keyResolver.markSuccess(
+            resolved.keyId,
+            resolved.modelId,
+            resolved.providerId,
+          );
 
-            if (modelsToTry.length === 0) {
-              throw new LLMError(
-                `Key ${keyMetadata.label} has no verified models available.`,
-                undefined,
-                providerId,
-              );
-            }
-
-            // Try every model in the list
-            for (const modelId of modelsToTry) {
-              // Logic Fix: Check if model is actually available (state-aware)
-              const isUsable = await availabilityManager.isModelUsable(
-                keyMetadata.id,
-                modelId,
-              );
-              if (!isUsable) {
-                console.log(
-                  `[Failover] Skipping ${modelId} on ${keyMetadata.label} (Not AVAILABLE or in COOLDOWN)`,
-                );
-                continue;
-              }
-
-              totalAttempts++;
-              try {
-                const adapter = getProviderAdapter(providerId);
-                const result = await adapter.chat(apiKey, {
-                  ...request,
-                  model: modelId,
-                });
-
-                // Success - mark model as available
-                availabilityManager
-                  .markModelAvailable(keyMetadata.id, modelId)
-                  .catch(() => {});
-
-                return result;
-              } catch (e) {
-                const msg = e instanceof Error ? e.message : String(e);
-                keyLastError = e instanceof Error ? e : new Error(msg);
-
-                // Extract error code from message using imported utility
-                const errorCode = extractErrorCode(msg);
-
-                if (errorCode) {
-                  availabilityManager
-                    .handleRuntimeError(keyMetadata.id, modelId, errorCode, msg)
-                    .catch(() => {});
-                }
-
-                if (
-                  errorCode === 401 ||
-                  msg.includes("unauthorized") ||
-                  msg.includes("invalid_api_key")
-                ) {
-                  console.error(
-                    `[Fatal] Key ${keyMetadata.label} is invalid. Skipping all models.`,
-                  );
-                  throw e;
-                }
-
-                if (errorCode === 429) {
-                  console.warn(
-                    `[RateLimit] Model ${modelId} hit rate limit on ${keyMetadata.label}. Trying next model...`,
-                  );
-                  continue;
-                }
-
-                if (errorCode === 404) {
-                  console.warn(
-                    `[NotFound] Model ${modelId} not found. Trying next model...`,
-                  );
-                  continue;
-                }
-
-                console.warn(
-                  `[Retry] Model ${modelId} failed: ${msg}. Trying next model on same key...`,
-                );
-              }
-            }
-
-            throw (
-              keyLastError ||
-              new Error(`All models failed for key ${keyMetadata.label}`)
-            );
-          },
-          { timeout: options?.timeout, modelId: providerModels[0] },
-        );
-
-        if (result.success && result.data && result.keyUsed) {
-          // Save stickiness
+          // Update Sticky
           this.stickyModels.set(capabilityKey, {
-            modelId: result.data.model,
-            providerId,
+            modelId: resolved.modelId,
+            providerId: resolved.providerId,
           });
 
-          // Record analytics
-          try {
-            const { analyticsService } =
-              await import("../services/analytics.service");
-            analyticsService.recordUsage({
-              keyId: result.keyUsed,
-              providerId,
-              modelId: result.data.model,
-              inputTokens: result.data.usage?.promptTokens || 0,
-              outputTokens: result.data.usage?.completionTokens || 0,
-              success: true,
-              latencyMs: result.duration || 0,
-            });
-          } catch (e) {
-            // Ignore analytics errors
-          }
+          // Analytics
+          // dynamically import to avoid circular dependency if any, or just use import
+          // using existing structure
+          this.recordAnalytics(resolved, response, duration).catch(() => {});
 
           return {
-            ...result.data,
-            providerId,
+            ...response,
+            providerId: resolved.providerId,
             attempts: totalAttempts,
           };
-        }
+        } catch (error: any) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          const msg = lastError.message;
+          const code = extractErrorCode(msg);
 
-        if (result.error) {
-          const isGenericError =
-            result.error.message.includes("No available keys") ||
-            (result.error.message.includes("No ") &&
-              result.error.message.includes("keys configured"));
-          if (!lastError || !isGenericError) {
-            lastError = result.error;
+          // Error Handling
+          if (code) {
+            await availabilityManager.handleRuntimeError(
+              resolved.keyId,
+              resolved.modelId,
+              code,
+              msg,
+            );
           }
+
+          // Mark failure in resolver cache immediately to avoid picking it again in same loop
+          keyResolver.markFailure(resolved.keyId, resolved.modelId);
+          excludedKeys.push(resolved.keyId);
+
           console.warn(
-            `[Failover] Provider ${providerId} failed: ${result.error.message}`,
+            `[UnifiedClient] Attempt ${totalAttempts} failed on ${resolved.modelId} (${resolved.providerId}): ${msg}`,
           );
+
+          // Fatal errors?
+          if (
+            code === 401 ||
+            msg.includes("unauthorized") ||
+            msg.includes("invalid_api_key")
+          ) {
+            // For fatal auth errors, we disable key via safety guard (handled by handleRuntimeError)
+            // But we continue loop to try simplified flow
+          }
         }
-      } catch (e) {
-        lastError = e instanceof Error ? e : new Error(String(e));
-        console.warn(
-          `[Failover] Provider ${providerId} threw:`,
-          lastError.message,
-        );
       }
     }
 
-    const triedProviders = providersInOrder.join(", ") || "none";
-    const lastContext = lastError?.message || "Unknown reason";
-    throw new Error(
-      `UnifiedLLMClient Failover Exhausted (after ${totalAttempts} total attempts across keys). Tried providers: [${triedProviders}]. Last failure: ${lastContext}`,
+    throw (
+      lastError ||
+      new Error(`All models failed. Tried: ${fullModelChain.join(", ")}`)
     );
+  }
+
+  private async recordAnalytics(
+    resolved: any,
+    response: ChatResponse,
+    duration: number,
+  ) {
+    try {
+      const { analyticsService } =
+        await import("../services/analytics.service");
+      analyticsService.recordUsage({
+        keyId: resolved.keyId,
+        providerId: resolved.providerId,
+        modelId: response.model,
+        inputTokens: response.usage?.promptTokens || 0,
+        outputTokens: response.usage?.completionTokens || 0,
+        success: true,
+        latencyMs: duration,
+      });
+    } catch (e) {
+      // ignore
+    }
   }
 
   async embeddings(

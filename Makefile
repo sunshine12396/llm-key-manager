@@ -50,7 +50,7 @@ format:
 
 # Run tests (placeholder)
 test:
-	@echo "No tests configured yet. Add tests in src/__tests__/"
+	pnpm test
 
 # Clean build artifacts
 clean:

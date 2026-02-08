@@ -6,11 +6,9 @@ import React, {
   useCallback,
 } from "react";
 import { vaultService } from "../../services/vault/vault.service";
-import { backgroundValidator } from "../../services";
-import {
-  ValidationEvent,
-  BackgroundValidationResult,
-} from "../../lifecycle/validator.job";
+import { validatorService } from "../../services/validation/validator.service";
+import { ValidationEvent } from "../../services/validation/validation.types";
+
 import { backgroundJobs } from "../../lifecycle/background-jobs";
 import { modelMetadataService } from "../../services/engines/model-discovery.service";
 import {
@@ -45,9 +43,7 @@ interface LLMKeyManagerContextType {
   // New: Validation event system
   validationEvents: ValidationEvent[];
   dismissValidationEvent: (keyId: string) => void;
-  getValidationResult: (
-    keyId: string,
-  ) => BackgroundValidationResult | undefined;
+  getValidationResult: (keyId: string) => ValidationEvent | undefined;
   isValidating: (keyId: string) => boolean;
 }
 
@@ -66,7 +62,7 @@ export const LLMKeyManagerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Subscribe to background validation events
   useEffect(() => {
-    const unsubscribe = backgroundValidator.subscribe((event) => {
+    const unsubscribe = validatorService.subscribe((event) => {
       // Update events list
       setValidationEvents((prev) => {
         // Remove existing event for this key and add new one
@@ -76,8 +72,8 @@ export const LLMKeyManagerProvider: React.FC<{ children: React.ReactNode }> = ({
 
       // Refresh keys when validation completes or fails
       if (
-        event.type === "validation_complete" ||
-        event.type === "validation_failed"
+        event.type === "validation:complete" ||
+        event.type === "validation:error"
       ) {
         refreshKeys();
       }
@@ -148,23 +144,13 @@ export const LLMKeyManagerProvider: React.FC<{ children: React.ReactNode }> = ({
     );
 
     // Fire and forget - validation runs in background
-    backgroundValidator
-      .validateKey(id, providerId, key, label)
-      .then((result) => {
-        console.log(
-          `[LLMKeyManagerProvider] Key ${id} validation complete:`,
-          result.status,
-        );
-        console.log(
-          `[LLMKeyManagerProvider] Verified ${result.models.length} models`,
-        );
-      })
-      .catch((err) => {
-        console.error(
-          `[LLMKeyManagerProvider] Key ${id} validation error:`,
-          err,
-        );
-      });
+    console.log(
+      `[LLMKeyManagerProvider] Queued background validation for key ${id}...`,
+    );
+
+    validatorService.queueValidation(id, 2).catch((err) => {
+      console.error(`[LLMKeyManagerProvider] Key ${id} validation error:`, err);
+    });
 
     return id;
   };
@@ -185,7 +171,7 @@ export const LLMKeyManagerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const deleteKey = async (id: string) => {
     // Cancel any ongoing validation
-    backgroundValidator.cancelValidation(id);
+    validatorService.cancelValidation(id);
 
     // Delete cached model metadata for this key
     await modelMetadataService.deleteModelsForKey(id);
@@ -205,20 +191,9 @@ export const LLMKeyManagerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const validateKey = async (id: string) => {
     try {
-      const allKeys = await vaultService.listKeys();
-      const target = allKeys.find((k) => k.id === id);
-      if (!target) return;
-
-      const apiKey = await vaultService.getKey(id);
-
       // Use background validator
       console.log(`[BackgroundValidator] Re-validating key ${id}...`);
-      backgroundValidator.validateKey(
-        id,
-        target.providerId,
-        apiKey,
-        target.label,
-      );
+      validatorService.queueValidation(id, 2);
     } catch (e) {
       console.error(`Failed to validate key ${id}`, e);
     }
@@ -229,11 +204,11 @@ export const LLMKeyManagerProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const getValidationResult = (keyId: string) => {
-    return backgroundValidator.getValidationResult(keyId);
+    return validatorService.getValidationResult(keyId);
   };
 
   const isValidating = (keyId: string) => {
-    return backgroundValidator.isValidating(keyId);
+    return validatorService.isValidating(keyId);
   };
 
   return (

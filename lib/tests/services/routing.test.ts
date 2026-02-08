@@ -1,139 +1,125 @@
+/**
+ * KeyRouter Tests
+ *
+ * Updated for Phase 6 refactoring:
+ * - Key selection logic has moved to keyResolver
+ * - KeyRouter now primarily handles rotation state for UI display
+ */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { KeyRouter, RoutingStrategy, keyRouter } from '../../services/engines/routing.engine';
-import { KeyMetadata, VerifiedModelMetadata, ModelPriority } from '../../models/metadata';
+import { describe, it, expect, beforeEach } from "vitest";
+import { KeyRouter, keyRouter } from "../../services/engines/routing.engine";
 
-describe('KeyRouter Check', () => {
-    // Reset singleton state before each test
-    beforeEach(() => {
-        keyRouter.resetStats();
-        // Reset private rotation state if possible, or just use a new instance for unit testing
-        // Since keyRouter is exported as singleton, we might need access to it or create a new class instance if exported
-        // The file exports 'KeyRouter' class, so we can instantiate it.
+describe("KeyRouter - Rotation State for UI", () => {
+  beforeEach(() => {
+    keyRouter.resetStats();
+  });
+
+  describe("Promoted Key Tracking", () => {
+    it("should track promoted key for UI display", () => {
+      const router = new KeyRouter();
+
+      router.markPromoted("k2", "openai");
+
+      expect(router.getPromotedKey("openai")).toBe("k2");
     });
 
-    const createKey = (id: string, priority: 'high' | 'medium' | 'low' = 'medium', latency = 100): KeyMetadata => ({
-        id,
-        providerId: 'openai',
-        label: `Key ${id}`,
-        priority,
-        isEnabled: true,
-        isRevoked: false,
-        verificationStatus: 'valid',
-        averageLatency: latency,
-        usageCount: 0,
-        createdAt: Date.now(),
-        lastUsed: 0
+    it("should return null when no key is promoted", () => {
+      const router = new KeyRouter();
+
+      expect(router.getPromotedKey("openai")).toBeNull();
     });
 
-    describe('Priority Routing', () => {
-        const router = new KeyRouter({ strategy: RoutingStrategy.PRIORITY });
+    it("should update promoted key when new one is set", () => {
+      const router = new KeyRouter();
 
-        it('should select high priority key over low priority', () => {
-            const keys = [
-                createKey('k1', 'low'),
-                createKey('k2', 'high'),
-                createKey('k3', 'medium')
-            ];
+      router.markPromoted("k1", "openai");
+      router.markPromoted("k2", "openai");
 
-            const selected = router.selectKey(keys, 'openai');
-            expect(selected?.id).toBe('k2');
-        });
+      expect(router.getPromotedKey("openai")).toBe("k2");
+    });
+  });
 
-        it('should use latency as tie-breaker for same priority', () => {
-            const keys = [
-                createKey('k1', 'high', 200),
-                createKey('k2', 'high', 100)
-            ];
+  describe("Rotation Events", () => {
+    it("should emit key_promoted event", () => {
+      const router = new KeyRouter();
+      const events: any[] = [];
 
-            const selected = router.selectKey(keys, 'openai');
-            expect(selected?.id).toBe('k2');
-        });
+      router.onRotation((event) => events.push(event));
+      router.markPromoted("k1", "openai");
 
-        it('should respect model-specific priority', () => {
-            const k1 = createKey('k1', 'high'); // General High
-            const k2 = createKey('k2', 'high'); // General High
-
-            const createVerifiedMeta = (keyId: string, modelId: string, priority: ModelPriority): VerifiedModelMetadata => ({
-                modelId,
-                providerId: 'openai',
-                keyId,
-                isAvailable: true,
-                state: 'AVAILABLE',
-                lastCheckedAt: Date.now(),
-                modelPriority: priority,
-                retryCount: 0,
-                nextRetryAt: null
-            });
-
-            // k2 has specific high priority for gpt-4
-            k2.verifiedModelsMeta = [createVerifiedMeta('k2', 'gpt-4', 5)]; // 5 is high
-            k1.verifiedModelsMeta = [createVerifiedMeta('k1', 'gpt-4', 1)];
-
-            const selected = router.selectKey([k1, k2], 'openai', [], 'gpt-4');
-            expect(selected?.id).toBe('k2');
-        });
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe("key_promoted");
+      expect(events[0].keyId).toBe("k1");
     });
 
-    describe('Auto-Switching & Rotation', () => {
-        const router = new KeyRouter({
-            strategy: RoutingStrategy.PRIORITY,
-            rotationCooldown: 5000 // Short cooldown for testing
-        });
+    it("should emit key_rotated_out event", () => {
+      const router = new KeyRouter();
+      const events: any[] = [];
 
-        it('should exclude rate-limited keys', () => {
-            const keys = [createKey('k1'), createKey('k2')];
+      router.onRotation((event) => events.push(event));
+      router.markRotatedOut("k1", "openai", 60000);
 
-            // Mark k1 as rate-limited
-            router.markRateLimited('k1', 'openai', 60000);
-
-            const selected = router.selectKey(keys, 'openai');
-            expect(selected?.id).toBe('k2');
-        });
-
-        it('should fallback to rate-limited key if NO healthy keys exist', () => {
-            const keys = [createKey('k1')];
-            router.markRateLimited('k1', 'openai', 60000);
-
-            // Should still return k1 because it's the only one (Failover Logic)
-            const selected = router.selectKey(keys, 'openai');
-            expect(selected?.id).toBe('k1');
-        });
-
-        it('should promote healthy key and stick to it', () => {
-            const keys = [createKey('k1'), createKey('k2')];
-
-            // k1 fails
-            router.markRateLimited('k1', 'openai', 60000);
-
-            // k2 selected
-            const selected = router.selectKey(keys, 'openai');
-            expect(selected?.id).toBe('k2');
-
-            // Mark k2 success -> Promoted
-            router.markHealthy('k2', 'openai');
-
-            // Even if k1 cooldown expired manually (simulated), k2 might still be preferred due to promotion?
-            // Actually config.rotationCooldown applies. 
-            // In Priority strategy, it usually strictly follows priority, but Router has "Promoted Key" logic.
-
-            const promoted = router.getPromotedKey('openai');
-            expect(promoted).toBe('k2');
-        });
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe("key_rotated_out");
+      expect(events[0].keyId).toBe("k1");
+      expect(events[0].retryAfterMs).toBe(60000);
     });
 
-    describe('Routing Strategies', () => {
-        it('should support Round Robin', () => {
-            const router = new KeyRouter({ strategy: RoutingStrategy.ROUND_ROBIN });
-            const keys = [createKey('k1'), createKey('k2')];
+    it("should emit key_restored event on clearRotation", () => {
+      const router = new KeyRouter();
+      const events: any[] = [];
 
-            const first = router.selectKey(keys, 'openai');
-            const second = router.selectKey(keys, 'openai');
-            const third = router.selectKey(keys, 'openai');
+      router.markRotatedOut("k1", "openai");
+      router.onRotation((event) => events.push(event));
+      router.clearRotation("openai");
 
-            expect(first?.id).toBe('k1');
-            expect(second?.id).toBe('k2');
-            expect(third?.id).toBe('k1');
-        });
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe("key_restored");
+      expect(events[0].keyId).toBe("k1");
     });
+
+    it("should support unsubscribe", () => {
+      const router = new KeyRouter();
+      const events: any[] = [];
+
+      const unsubscribe = router.onRotation((event) => events.push(event));
+      unsubscribe();
+      router.markPromoted("k1", "openai");
+
+      expect(events).toHaveLength(0);
+    });
+  });
+
+  describe("Rotation Status", () => {
+    it("should return rotation state for provider", () => {
+      const router = new KeyRouter();
+
+      router.markPromoted("k2", "openai");
+      router.markRotatedOut("k1", "openai");
+
+      const status = router.getRotationStatus("openai");
+      expect(status?.promotedKeyId).toBe("k2");
+      expect(status?.rotatedOutKeyId).toBe("k1");
+    });
+
+    it("should return null for providers without rotation", () => {
+      const router = new KeyRouter();
+
+      expect(router.getRotationStatus("anthropic")).toBeNull();
+    });
+  });
+
+  describe("Reset", () => {
+    it("should clear all rotation state on reset", () => {
+      const router = new KeyRouter();
+
+      router.markPromoted("k1", "openai");
+      router.markPromoted("k2", "anthropic");
+
+      router.resetStats();
+
+      expect(router.getPromotedKey("openai")).toBeNull();
+      expect(router.getPromotedKey("anthropic")).toBeNull();
+    });
+  });
 });
