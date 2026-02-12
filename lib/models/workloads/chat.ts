@@ -23,10 +23,10 @@ export interface ChatRequest {
   timeout?: number; // Request timeout in milliseconds
   tools?: ToolDefinition[];
   tool_choice?:
-    | "auto"
-    | "none"
-    | "required"
-    | { type: "function"; function: { name: string } };
+  | "auto"
+  | "none"
+  | "required"
+  | { type: "function"; function: { name: string } };
 }
 
 export interface ToolDefinition {

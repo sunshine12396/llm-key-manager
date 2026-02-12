@@ -5,7 +5,7 @@
  * Extracted from unified-llm.client.ts for better maintainability.
  */
 
-import { AIProviderId, KeyMetadata } from "../models/metadata";
+import { AIProviderId, KeyMetadata } from "../models";
 
 // ============================================
 // PROVIDER CONSTANTS

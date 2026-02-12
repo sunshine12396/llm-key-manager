@@ -5,7 +5,7 @@
  * All data is loaded from JSON constants to allow updates without redeployment.
  */
 
-import { ModelCapability } from "../models/metadata";
+import { ModelCapability } from "../models";
 import modelsJson from "../constants/models.json";
 import pricingJson from "../constants/pricing.json";
 import limitsJson from "../constants/limits.json";

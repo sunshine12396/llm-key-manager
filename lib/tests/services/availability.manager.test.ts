@@ -11,6 +11,7 @@ vi.mock("../../db", () => ({
             update: vi.fn(),
             where: vi.fn().mockReturnThis(),
             equals: vi.fn().mockReturnThis(),
+            and: vi.fn().mockReturnThis(),
             toArray: vi.fn().mockResolvedValue([]),
             modify: vi.fn().mockResolvedValue(undefined),
             bulkPut: vi.fn().mockResolvedValue(undefined),
@@ -24,6 +25,11 @@ vi.mock("../../services/safety", () => ({
         recordProviderFailure: vi.fn(),
         recordKeySuccess: vi.fn(),
         recordProviderSuccess: vi.fn(),
+        isProviderDisabled: vi.fn().mockReturnValue(false),
+        isProviderCircuitOpen: vi.fn().mockReturnValue(false),
+        getForcedFallback: vi.fn().mockReturnValue(null),
+        isKeyDisabled: vi.fn().mockReturnValue(false),
+        isKeyCircuitOpen: vi.fn().mockReturnValue(false),
     },
 }));
 

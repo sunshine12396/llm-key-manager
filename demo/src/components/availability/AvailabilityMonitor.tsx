@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAvailability, useLLMKeyManager } from '../../../../lib';
-import { VerifiedModelMetadata, ModelState } from '../../../../lib/models/types';
-import { KeyMetadata } from '../../../../lib/models/metadata';
+import { useAvailability, useLLMKeyManager, VerifiedModelMetadata, ModelState, KeyMetadata } from '../../../../lib';
 import { RefreshCw, AlertTriangle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import clsx from 'clsx';
 

@@ -1,51 +1,132 @@
 /**
- * Safety Guard Module (Facade)
+ * Safety Guard Module
  *
  * Provides a unified interface for all safety-related functionality.
- * Delegates to specialized modules for specific operations.
+ * Controls provider/key status, circuit breakers, and emergency overrides.
  *
  * Features:
  * - Global provider disable
  * - Freeze background scanning
  * - Force fallback models
- * - Per-key circuit breaker with auto-recovery
+ * - Per-key and per-provider circuit breakers with auto-recovery
+ * - LocalStorage persistence
  */
 
 import type { AIProviderId } from "../../models/types";
 import {
-  SafetyEventEmitter,
-  type SafetyEvent,
-  type SafetyStatus,
-  type CircuitState,
-} from "./safety-events";
+  SafetyEvent,
+  SafetyEventListener,
+  SafetyStatus,
+  CircuitState,
+  GlobalSafetyState,
+  CircuitBreakerState,
+} from "./types";
 import { CircuitBreaker, circuitBreaker } from "./circuit-breaker";
-import { SafetyControls, safetyControls } from "./safety-controls";
-import { persistSafetyState, loadSafetyState } from "./safety-persistence";
 
 // ============================================
-// SAFETY GUARD FACADE
+// INTERNAL EMITTER
+// ============================================
+
+class SafetyEventEmitter {
+  private listeners: SafetyEventListener[] = [];
+
+  subscribe(listener: SafetyEventListener): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  emit(event: SafetyEvent): void {
+    this.listeners.forEach((l) => l(event));
+  }
+}
+
+// ============================================
+// PERSISTENCE CONSTANTS
+// ============================================
+
+const STORAGE_KEY = "llm_safety_guard_state_v2";
+
+interface PersistedState {
+  version: number;
+  disabledProviders: AIProviderId[];
+  scanningFrozen: boolean;
+  emergencyMode: boolean;
+  disabledKeys: string[];
+  keyCircuitBreakers: Array<[string, CircuitBreakerState]>;
+  providerCircuitBreakers: Array<[AIProviderId, CircuitBreakerState]>;
+}
+
+// ============================================
+// MAIN SAFETY GUARD
 // ============================================
 
 class SafetyGuard {
   private eventEmitter = new SafetyEventEmitter();
-  private controls: SafetyControls;
   private breaker: CircuitBreaker;
+  private state: GlobalSafetyState = {
+    disabledProviders: new Set(),
+    scanningFrozen: false,
+    forcedFallbackModel: null,
+    forcedFallbackProvider: null,
+    emergencyMode: false,
+    disabledKeys: new Set(),
+  };
 
-  constructor(
-    controls: SafetyControls = safetyControls,
-    breaker: CircuitBreaker = circuitBreaker,
-  ) {
-    this.controls = controls;
+  constructor(breaker: CircuitBreaker = circuitBreaker) {
     this.breaker = breaker;
     this.loadState();
   }
 
+  // ============================================
+  // PERSISTENCE
+  // ============================================
+
   private loadState(): void {
-    loadSafetyState(this.controls, this.breaker);
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+
+      const data: PersistedState = JSON.parse(raw);
+      if (data.disabledProviders)
+        this.state.disabledProviders = new Set(data.disabledProviders);
+      if (data.scanningFrozen !== undefined)
+        this.state.scanningFrozen = data.scanningFrozen;
+      if (data.emergencyMode !== undefined)
+        this.state.emergencyMode = data.emergencyMode;
+      if (data.disabledKeys)
+        this.state.disabledKeys = new Set(data.disabledKeys);
+
+      if (Array.isArray(data.keyCircuitBreakers)) {
+        this.breaker.restoreKeyCircuits(data.keyCircuitBreakers);
+      }
+      if (Array.isArray(data.providerCircuitBreakers)) {
+        this.breaker.restoreProviderCircuits(data.providerCircuitBreakers);
+      }
+      console.log("[SafetyGuard] State restored from storage");
+    } catch (e) {
+      console.warn("[SafetyGuard] Failed to load state:", e);
+    }
   }
 
   private saveState(): void {
-    persistSafetyState(this.controls, this.breaker);
+    if (typeof window === "undefined") return;
+    try {
+      const state: PersistedState = {
+        version: 2,
+        disabledProviders: Array.from(this.state.disabledProviders),
+        scanningFrozen: this.state.scanningFrozen,
+        emergencyMode: this.state.emergencyMode,
+        disabledKeys: Array.from(this.state.disabledKeys),
+        keyCircuitBreakers: this.breaker.getKeyCircuitsSnapshot(),
+        providerCircuitBreakers: this.breaker.getProviderCircuitsSnapshot(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.warn("[SafetyGuard] Failed to save state:", e);
+    }
   }
 
   private emit(event: SafetyEvent): void {
@@ -58,15 +139,19 @@ class SafetyGuard {
   // ============================================
 
   disableProvider(providerId: AIProviderId, reason: string): void {
-    this.controls.disableProvider(providerId, reason, (e) => this.emit(e));
+    this.state.disabledProviders.add(providerId);
+    console.warn(`[SafetyGuard] ⛔ Provider ${providerId} DISABLED: ${reason}`);
+    this.emit({ type: "PROVIDER_DISABLED", providerId, reason });
   }
 
   enableProvider(providerId: AIProviderId): void {
-    this.controls.enableProvider(providerId, (e) => this.emit(e));
+    this.state.disabledProviders.delete(providerId);
+    console.log(`[SafetyGuard] ✅ Provider ${providerId} ENABLED`);
+    this.emit({ type: "PROVIDER_ENABLED", providerId });
   }
 
   isProviderDisabled(providerId: AIProviderId): boolean {
-    return this.controls.isProviderDisabled(providerId);
+    return this.state.disabledProviders.has(providerId);
   }
 
   // ============================================
@@ -74,15 +159,19 @@ class SafetyGuard {
   // ============================================
 
   disableKey(keyId: string, reason: string): void {
-    this.controls.disableKey(keyId, reason, (e) => this.emit(e));
+    this.state.disabledKeys.add(keyId);
+    console.warn(`[SafetyGuard] ⛔ Key ${keyId} DISABLED: ${reason}`);
+    this.emit({ type: "KEY_DISABLED", keyId, reason });
   }
 
   enableKey(keyId: string): void {
-    this.controls.enableKey(keyId, (e) => this.emit(e));
+    this.state.disabledKeys.delete(keyId);
+    console.log(`[SafetyGuard] ✅ Key ${keyId} ENABLED`);
+    this.emit({ type: "KEY_ENABLED", keyId });
   }
 
   isKeyDisabled(keyId: string): boolean {
-    return this.controls.isKeyDisabled(keyId);
+    return this.state.disabledKeys.has(keyId);
   }
 
   // ============================================
@@ -90,15 +179,19 @@ class SafetyGuard {
   // ============================================
 
   freezeScanning(reason: string): void {
-    this.controls.freezeScanning(reason, (e) => this.emit(e));
+    this.state.scanningFrozen = true;
+    console.warn(`[SafetyGuard] ❄️ Scanning FROZEN: ${reason}`);
+    this.emit({ type: "SCANNING_FROZEN", reason });
   }
 
   resumeScanning(): void {
-    this.controls.resumeScanning((e) => this.emit(e));
+    this.state.scanningFrozen = false;
+    console.log(`[SafetyGuard] ▶️ Scanning RESUMED`);
+    this.emit({ type: "SCANNING_RESUMED" });
   }
 
   isScanningFrozen(): boolean {
-    return this.controls.isScanningFrozen();
+    return this.state.scanningFrozen;
   }
 
   // ============================================
@@ -106,15 +199,29 @@ class SafetyGuard {
   // ============================================
 
   setForcedFallback(model: string, provider?: AIProviderId): void {
-    this.controls.setForcedFallback(model, provider, (e) => this.emit(e));
+    this.state.forcedFallbackModel = model;
+    this.state.forcedFallbackProvider = provider || null;
+    console.warn(
+      `[SafetyGuard] 🎯 Forced fallback: ${model}${provider ? ` (${provider})` : ""}`,
+    );
+    this.emit({ type: "FALLBACK_FORCED", model, provider });
   }
 
   clearForcedFallback(): void {
-    this.controls.clearForcedFallback((e) => this.emit(e));
+    this.state.forcedFallbackModel = null;
+    this.state.forcedFallbackProvider = null;
+    console.log(`[SafetyGuard] Forced fallback CLEARED`);
+    this.emit({ type: "FALLBACK_CLEARED" });
   }
 
   getForcedFallback(): { model: string; provider?: AIProviderId } | null {
-    return this.controls.getForcedFallback();
+    if (this.state.forcedFallbackModel) {
+      return {
+        model: this.state.forcedFallbackModel,
+        provider: this.state.forcedFallbackProvider || undefined,
+      };
+    }
+    return null;
   }
 
   // ============================================
@@ -122,15 +229,19 @@ class SafetyGuard {
   // ============================================
 
   enableEmergencyMode(reason: string): void {
-    this.controls.enableEmergencyMode(reason, (e) => this.emit(e));
+    this.state.emergencyMode = true;
+    console.warn(`[SafetyGuard] 🚨 EMERGENCY MODE: ${reason}`);
+    this.emit({ type: "EMERGENCY_MODE_ENABLED", reason });
   }
 
   disableEmergencyMode(): void {
-    this.controls.disableEmergencyMode((e) => this.emit(e));
+    this.state.emergencyMode = false;
+    console.log(`[SafetyGuard] Emergency mode DISABLED`);
+    this.emit({ type: "EMERGENCY_MODE_DISABLED" });
   }
 
   isEmergencyMode(): boolean {
-    return this.controls.isEmergencyMode();
+    return this.state.emergencyMode;
   }
 
   // ============================================
@@ -237,13 +348,12 @@ class SafetyGuard {
   // ============================================
 
   getStatus(): SafetyStatus {
-    const snapshot = this.controls.getSnapshot();
     return {
-      disabledProviders: snapshot.disabledProviders,
-      scanningFrozen: snapshot.scanningFrozen,
+      disabledProviders: Array.from(this.state.disabledProviders),
+      scanningFrozen: this.state.scanningFrozen,
       forcedFallback: this.getForcedFallback(),
-      emergencyMode: snapshot.emergencyMode,
-      disabledKeys: snapshot.disabledKeys,
+      emergencyMode: this.state.emergencyMode,
+      disabledKeys: Array.from(this.state.disabledKeys),
       keyCircuits: Object.fromEntries(
         this.breaker.getKeyCircuitsSnapshot().map(([k, v]) => [k, v.state]),
       ),
@@ -260,9 +370,17 @@ class SafetyGuard {
   }
 
   resetAll(): void {
-    this.controls.reset((e) => this.emit(e));
+    this.state = {
+      disabledProviders: new Set(),
+      scanningFrozen: false,
+      forcedFallbackModel: null,
+      forcedFallbackProvider: null,
+      emergencyMode: false,
+      disabledKeys: new Set(),
+    };
     this.breaker.clear();
     this.saveState();
+    this.emit({ type: "SAFETY_RESET" });
     console.log(`[SafetyGuard] All safety state RESET`);
   }
 }

@@ -12,9 +12,11 @@ import { db } from "../../db";
 import {
   AIProviderId,
   VerifiedModelMetadata,
+  ModelState,
   ModelPriority,
+  ModelCapability,
 } from "../../models/types";
-import { ModelStateMachine, ModelState } from "./state-machine";
+import { ModelStateMachine } from "./state-machine";
 import {
   calculateRetry,
   calculateQuotaRetry,
@@ -66,10 +68,107 @@ const MODEL_PRIORITY_PATTERNS: Array<{
   ];
 
 // ============================================
+// TYPES
+// ============================================
+
+export interface RotationEvent {
+  type: "key_rotated_out" | "key_promoted" | "key_restored";
+  keyId: string;
+  providerId: AIProviderId;
+  reason?: "rate_limited" | "error" | "manual";
+  retryAfterMs?: number;
+}
+
+export interface ModelFilter {
+  provider?: string;
+  capabilities?: ModelCapability[];
+  priority?: number;
+}
+
+// ============================================
 // AVAILABILITY MANAGER CLASS
 // ============================================
 
 export class KeyModelAvailabilityManager {
+  private activeKeyMap: Map<AIProviderId, string> = new Map();
+  private rotationListeners: Array<(event: RotationEvent) => void> = [];
+  private updateListeners: Array<() => void> = [];
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    this.refreshActiveKeys();
+  }
+
+  /**
+   * Subscribe to rotation events for UI
+   */
+  onRotation(listener: (event: RotationEvent) => void): () => void {
+    this.rotationListeners.push(listener);
+    return () => {
+      this.rotationListeners = this.rotationListeners.filter(
+        (l) => l !== listener,
+      );
+    };
+  }
+
+  /**
+   * Subscribe to general status updates
+   */
+  onUpdate(callback: () => void): () => void {
+    this.updateListeners.push(callback);
+    return () => {
+      this.updateListeners = this.updateListeners.filter((l) => l !== callback);
+    };
+  }
+
+  private emitUpdate(): void {
+    this.updateListeners.forEach((l) => l());
+  }
+
+  private emitRotation(event: RotationEvent): void {
+    this.rotationListeners.forEach((l) => l(event));
+  }
+
+  /**
+   * Get the currently promoted (best) key for a provider
+   */
+  getPromotedKey(providerId: AIProviderId): string | null {
+    return this.activeKeyMap.get(providerId) || null;
+  }
+
+  /**
+   * Refresh the active key map based on current availability.
+   * Called internally or when state changes.
+   */
+  async refreshActiveKeys(): Promise<void> {
+    if (this.refreshTimer) return;
+
+    this.refreshTimer = setTimeout(async () => {
+      const providers: AIProviderId[] = ["openai", "anthropic", "gemini"];
+      for (const p of providers) {
+        const best = await this.getBestAvailableModel(p);
+        if (best) {
+          const current = this.activeKeyMap.get(p);
+          if (current !== best.keyId) {
+            this.activeKeyMap.set(p, best.keyId);
+            this.emitRotation({
+              type: "key_promoted",
+              keyId: best.keyId,
+              providerId: p,
+            });
+          }
+        } else {
+          if (this.activeKeyMap.has(p)) {
+            this.activeKeyMap.delete(p);
+            this.emitUpdate();
+          }
+        }
+      }
+      this.emitUpdate();
+      this.refreshTimer = null;
+    }, 50);
+  }
+
   /**
    * Get model priority based on model ID patterns.
    */
@@ -103,6 +202,16 @@ export class KeyModelAvailabilityManager {
     modelPriority: ModelPriority = 3,
   ): RetryDecision {
     return calculateQuotaRetry(quotaResetAt, modelPriority);
+  }
+
+  /**
+   * Get cached metadata for a specific model
+   */
+  async getModelMetadata(
+    keyId: string,
+    modelId: string,
+  ): Promise<VerifiedModelMetadata | undefined> {
+    return db.modelCache.get([modelId, keyId]);
   }
 
   // ============================================
@@ -320,6 +429,19 @@ export class KeyModelAvailabilityManager {
       .toArray();
   }
 
+  /**
+   * Get all available models for a provider (across all keys)
+   */
+  async getAvailableModels(
+    providerId: AIProviderId,
+  ): Promise<VerifiedModelMetadata[]> {
+    return db.modelCache
+      .where("providerId")
+      .equals(providerId)
+      .and((m: VerifiedModelMetadata) => m.isAvailable)
+      .toArray();
+  }
+
   // ============================================
   // RUNTIME: Error handling
   // ============================================
@@ -423,6 +545,7 @@ export class KeyModelAvailabilityManager {
       `[Availability] ${modelId} -> ${newState} | ${retryDecision.reason}`,
     );
 
+    await this.refreshActiveKeys();
     return newState;
   }
 
@@ -447,6 +570,7 @@ export class KeyModelAvailabilityManager {
     console.log(
       `[Availability] Marked ${models.length} models as quota exhausted (COOLDOWN) for key ${keyId}`,
     );
+    await this.refreshActiveKeys();
   }
 
   /**
@@ -474,6 +598,7 @@ export class KeyModelAvailabilityManager {
     if (existing) {
       availabilityCache.markUsable(keyId, modelId, existing.providerId, existing.modelPriority);
     }
+    await this.refreshActiveKeys();
   }
 
   // ============================================
@@ -485,6 +610,126 @@ export class KeyModelAvailabilityManager {
    */
   async getModelsForKey(keyId: string): Promise<VerifiedModelMetadata[]> {
     return db.modelCache.where("keyId").equals(keyId).toArray();
+  }
+
+  /**
+   * Query available models based on rich filters
+   */
+  async queryAvailableModels(
+    filter: ModelFilter,
+  ): Promise<VerifiedModelMetadata[]> {
+    return db.modelCache
+      .filter((m: VerifiedModelMetadata) => {
+        if (!m.isAvailable) return false;
+        if (filter.provider && m.providerId !== filter.provider) return false;
+        if (
+          filter.priority !== undefined &&
+          (m.modelPriority || 0) < filter.priority
+        )
+          return false;
+        if (filter.capabilities && filter.capabilities.length > 0) {
+          const modelCaps = m.capabilities || [];
+          return filter.capabilities.every((cap) => modelCaps.includes(cap));
+        }
+        return true;
+      })
+      .toArray();
+  }
+
+  /**
+   * Save or update model metadata
+   */
+  async saveModelMetadata(metadata: VerifiedModelMetadata): Promise<void> {
+    await db.modelCache.put(metadata);
+  }
+
+  /**
+   * Batch save model metadata
+   */
+  async saveModelMetadataBatch(
+    metadataList: VerifiedModelMetadata[],
+  ): Promise<void> {
+    await db.modelCache.bulkPut(metadataList);
+    await this.refreshActiveKeys();
+  }
+
+  /**
+   * Get models that need re-verification (older than maxAge)
+   */
+  async getStaleModels(
+    maxAgeMs: number = 24 * 60 * 60 * 1000,
+  ): Promise<VerifiedModelMetadata[]> {
+    const cutoff = Date.now() - maxAgeMs;
+    return db.modelCache.where("lastCheckedAt").below(cutoff).toArray();
+  }
+
+  /**
+   * Get models due for retry
+   */
+  async getModelsDueForRetry(
+    limit: number = 50,
+  ): Promise<VerifiedModelMetadata[]> {
+    const now = Date.now();
+    const due = await db.modelCache
+      .where("nextRetryAt")
+      .belowOrEqual(now)
+      .and((m) => !m.isAvailable && !/-\d{10,}$/.test(m.modelId))
+      .limit(limit)
+      .toArray();
+
+    if (due.length < limit) {
+      const unset = await db.modelCache
+        .filter(
+          (m) =>
+            !m.isAvailable &&
+            m.nextRetryAt === null &&
+            m.state !== "PERM_FAILED" &&
+            !!m.keyId &&
+            !/-\d{10,}$/.test(m.modelId),
+        )
+        .limit(limit - due.length)
+        .toArray();
+      return [...due, ...unset];
+    }
+    return due;
+  }
+
+  /**
+   * Clear entire cache
+   */
+  async clearCache(): Promise<void> {
+    await db.modelCache.clear();
+    availabilityCache.clear();
+  }
+
+  /**
+   * Update model availability based on error code
+   * - 401/403: Mark unavailable (auth issue)
+   * - 429: Keep available (temporary rate limit)
+   * - 404: Mark unavailable (model not found)
+   * - 500+: Keep available (server issue, temporary)
+   */
+  async handleModelError(
+    keyId: string,
+    modelId: string,
+    errorCode: number,
+    errorMessage: string,
+  ): Promise<"unavailable" | "temporary" | "unknown"> {
+    // Permanent failures - mark as unavailable
+    if (errorCode === 401 || errorCode === 403 || errorCode === 404) {
+      await this.handleRuntimeError(keyId, modelId, errorCode, errorMessage);
+      return "unavailable";
+    }
+
+    // Temporary failures - don't change status at DB level (handled by retry strategy)
+    if (errorCode === 429 || errorCode >= 500) {
+      console.log(
+        `[Availability] Temporary error ${errorCode} for ${modelId}, keeping status`,
+      );
+      return "temporary";
+    }
+
+    return "unknown";
   }
 
   /**

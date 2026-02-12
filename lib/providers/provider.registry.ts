@@ -2,7 +2,7 @@ import { IProviderAdapter } from "./types";
 import { OpenAIPlugin } from "./openai/openai.plugin";
 import { AnthropicPlugin } from "./anthropic/anthropic.plugin";
 import { GeminiPlugin } from "./gemini/gemini.plugin";
-import { AIProviderId } from "../models/metadata";
+import { AIProviderId } from "../models";
 
 const adapters: Record<string, IProviderAdapter> = {};
 

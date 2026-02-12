@@ -1,6 +1,6 @@
 import { vaultService } from '../services/vault/vault.service';
 import { AIProviderId, KeySummary } from './types';
-import { KeyMetadata } from '../models/metadata';
+import { KeyMetadata } from '../models';
 
 /**
  * Public Vault API

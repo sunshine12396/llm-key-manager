@@ -1,4 +1,4 @@
-import { RateLimitData } from "../../../models/metadata";
+import { RateLimitData } from "../../../models";
 
 export async function checkRateLimits(
   _apiKey: string,

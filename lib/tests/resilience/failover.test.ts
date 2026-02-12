@@ -12,7 +12,7 @@ import { vaultService } from "../../services/vault/vault.service";
 import { keyResolver } from "../../services/availability";
 import { safetyGuard } from "../../services/safety";
 import { quotaManager } from "../../services/policies/quota.policy";
-import { KeyMetadata } from "../../models/metadata";
+import { KeyMetadata } from "../../models";
 import { retryService } from "../../services/policies/retry.policy";
 
 // Mock dependencies

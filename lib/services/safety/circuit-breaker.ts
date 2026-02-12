@@ -17,7 +17,7 @@ import type {
   CircuitBreakerState,
   CircuitState,
   SafetyEvent,
-} from "./safety-events";
+} from "./types";
 
 // ============================================
 // DEFAULT CONFIGURATIONS

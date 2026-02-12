@@ -10,12 +10,12 @@ import { validatorService } from "../../services/validation/validator.service";
 import { ValidationEvent } from "../../services/validation/validation.types";
 
 import { backgroundJobs } from "../../lifecycle/background-jobs";
-import { modelMetadataService } from "../../services/engines/model-discovery.service";
+import { availabilityManager } from "../../services/availability";
 import {
   KeyMetadata,
   AIProviderId,
   KeyVerificationStatus,
-} from "../../models/metadata";
+} from "../../models";
 
 interface LLMKeyManagerContextType {
   isUnlocked: boolean;
@@ -174,7 +174,7 @@ export const LLMKeyManagerProvider: React.FC<{ children: React.ReactNode }> = ({
     validatorService.cancelValidation(id);
 
     // Delete cached model metadata for this key
-    await modelMetadataService.deleteModelsForKey(id);
+    await availabilityManager.deleteKeyModels(id);
 
     await vaultService.deleteKey(id);
     await refreshKeys();

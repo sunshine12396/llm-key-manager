@@ -1,12 +1,5 @@
 import { AIProviderId, RateLimitData } from "./provider-metadata";
 
-// Re-export ModelState from state machine for convenience
-export type {
-  ModelState,
-  TransitionEvent,
-} from "../../services/availability/state-machine";
-import type { ModelState } from "../../services/availability/state-machine";
-
 // Model capability types for filtering
 export type ModelCapability =
   | "text-chat" // Generic text generation/chat
@@ -17,13 +10,18 @@ export type ModelCapability =
   | "audio-tts" // Text to speech
   | "audio-input" // Can process audio as input
   | "video-gen" // Video generation
-  | "embedding"; // Text embeddings
+  | "embedding" // Text embeddings
+  | "json-mode" // Supports native JSON mode
+  | "tool-use"; // Supports function calling / tools
 
 /**
  * Priority levels for models and keys.
  * Higher number = higher priority = tried first.
  */
 export type ModelPriority = 1 | 2 | 3 | 4 | 5;
+
+// Re-export ModelState from state machine for convenience
+export type ModelState = "NEW" | "CHECKING" | "AVAILABLE" | "TEMP_FAILED" | "PERM_FAILED" | "COOLDOWN";
 
 /**
  * Detailed metadata for a verified model.
@@ -38,7 +36,6 @@ export interface VerifiedModelMetadata {
   isAvailable: boolean;
   /**
    * Current state in the availability state machine.
-   * Use ModelStateMachine.transition() to change this value.
    */
   state: ModelState;
   lastCheckedAt: number;

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { useLLMKeyManager, llmClient } from '../../../../lib';
-import { AIProviderId } from '../../../../lib/models/types';
+import { useLLMKeyManager, llmClient, AIProviderId } from '../../../../lib';
 import { MessageSquare, Terminal, Send, Activity, Sparkles, Zap, Brain, Code } from 'lucide-react';
 
 // Simplified Model Options focused on Capabilities (which trigger auto-switching)

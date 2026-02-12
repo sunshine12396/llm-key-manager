@@ -1,7 +1,7 @@
 import {
   EmbeddingRequest,
   EmbeddingResponse,
-} from "../../../models/workloads/multimodal";
+} from "../../../models";
 import { createGeminiClient } from "../client";
 import { parseGeminiError } from "./chat";
 

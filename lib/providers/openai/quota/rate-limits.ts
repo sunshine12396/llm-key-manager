@@ -1,4 +1,4 @@
-import { RateLimitData } from "../../../models/metadata";
+import { RateLimitData } from "../../../models";
 
 const VALIDATION_MODEL = "gpt-4o-mini";
 

@@ -5,7 +5,7 @@
  * LLM API errors across all providers.
  */
 
-import { AIProviderId } from "../models/metadata";
+import { AIProviderId } from "../models";
 
 // ============================================
 // CUSTOM ERROR CLASSES

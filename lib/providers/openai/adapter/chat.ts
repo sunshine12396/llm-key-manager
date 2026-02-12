@@ -1,4 +1,4 @@
-import { ChatRequest, ChatResponse } from "../../../models/workloads";
+import { ChatRequest, ChatResponse } from "../../../models";
 import { createOpenAIClient } from "../client";
 import { parseOpenAIError } from "./errors";
 

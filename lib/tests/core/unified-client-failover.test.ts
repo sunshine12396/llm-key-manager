@@ -123,10 +123,7 @@ describe("UnifiedLLMClient - Failover Logic", () => {
         // Re-mock chat to behave correctly based on inputs
         // Re-mock chat to behave correctly based on inputs
         mockChat.mockReset();
-        mockChat.mockImplementation(async (apiKey, req) => {
-            // Fix unused var lint
-            const _apiKey = apiKey; // eslint-disable-line
-
+        mockChat.mockImplementation(async (_apiKey, req) => {
             console.error(`[TEST] Calling chat for model ${req.model}`);
 
             // Check the REQUESTED model in the args

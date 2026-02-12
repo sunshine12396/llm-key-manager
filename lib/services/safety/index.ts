@@ -1,7 +1,7 @@
 /**
  * Safety Module Index
  *
- * Re-exports all safety-related functionality.
+ * Re-exports all safety-related functionality from consolidated modules.
  */
 
 // Main facade
@@ -16,18 +16,8 @@ export type {
   CircuitState,
   CircuitBreakerConfig,
   CircuitBreakerState,
-} from "./safety-events";
-export { SafetyEventEmitter } from "./safety-events";
+  GlobalSafetyState,
+} from "./types";
 
 // Circuit breaker
-export { CircuitBreaker, circuitBreaker } from "./circuit-breaker";
-
-// Controls
-export { SafetyControls, safetyControls } from "./safety-controls";
-
-// Persistence
-export {
-  persistSafetyState,
-  loadSafetyState,
-  clearPersistedState,
-} from "./safety-persistence";
+export { CircuitBreaker, circuitBreaker, DEFAULT_CIRCUIT_CONFIG } from "./circuit-breaker";

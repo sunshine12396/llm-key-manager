@@ -39,9 +39,13 @@ export function useAvailability() {
 
   useEffect(() => {
     refreshStats();
-    // Poll every 5 seconds for UI updates
-    const interval = setInterval(refreshStats, 5000);
-    return () => clearInterval(interval);
+
+    // Event-driven updates instead of polling
+    const unsubscribe = availabilityManager.onUpdate(() => {
+      refreshStats();
+    });
+
+    return unsubscribe;
   }, []);
 
   return {

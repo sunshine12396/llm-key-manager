@@ -6,7 +6,6 @@ export { validatorService } from "./validation/validator.service";
 
 export { llmClient } from "../core/unified-llm.client";
 export { CryptoService } from "./vault/crypto.service";
-export { keyRouter } from "./engines/routing.engine";
 
 // Export availability manager
 export { availabilityManager } from "./availability";

@@ -7,7 +7,7 @@
 
 import { modelVerifier } from "./model-verifier";
 import { vaultService } from "../vault/vault.service";
-import { modelMetadataService } from "../engines/model-discovery.service";
+import { availabilityManager } from "../availability";
 import type { VerifiedModelMetadata } from "../../models/types";
 
 interface RetryStats {
@@ -24,7 +24,7 @@ export class RetryScheduler {
 
     // 1. Fetch models due for retry (COOLDOWN with passed retry time)
     // We use the service method instead of direct DB access for consistency
-    const dueModels = await modelMetadataService.getModelsDueForRetry(50);
+    const dueModels = await availabilityManager.getModelsDueForRetry(50);
 
     if (dueModels.length === 0) return stats;
 
@@ -82,7 +82,7 @@ export class RetryScheduler {
           );
 
           // Update DB with result
-          await modelMetadataService.saveModelMetadata(result);
+          await availabilityManager.saveModelMetadata(result);
 
           if (result.state === "AVAILABLE") {
             stats.recovered++;
@@ -109,10 +109,10 @@ export class RetryScheduler {
 
             console.log(
               `[RetryScheduler] Model ${result.modelId} still failed (attempt ${newRetryCount}), ` +
-                `next retry at ${decision.nextRetryAt ? new Date(decision.nextRetryAt).toISOString() : "never"}`,
+              `next retry at ${decision.nextRetryAt ? new Date(decision.nextRetryAt).toISOString() : "never"}`,
             );
 
-            await modelMetadataService.saveModelMetadata(updated);
+            await availabilityManager.saveModelMetadata(updated);
           }
         }
       } catch (e) {

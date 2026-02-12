@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { KeyMetadata, VerifiedModelMetadata } from "../../../models/types";
-import { keyRouter } from "../../../services";
+import { availabilityManager } from "../../../services";
 import useLLMKeyManager from "../../../hooks/useLLMKeyManager";
 import { AlertCircle, Loader2, Clock } from "lucide-react";
 import { Progress } from "../../ui";
@@ -38,7 +38,7 @@ export const KeyRow: React.FC<KeyRowProps> = ({
   onToggleActive,
 }) => {
   const isActive = keyData.isEnabled !== false;
-  const isPrimary = keyRouter.getPromotedKey(keyData.providerId) === keyData.id;
+  const isPrimary = availabilityManager.getPromotedKey(keyData.providerId) === keyData.id;
   const { validationEvents } = useLLMKeyManager();
   const validationEvent = validationEvents.find(
     (e: any) => e.keyId === keyData.id,

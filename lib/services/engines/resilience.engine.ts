@@ -10,7 +10,7 @@
  * Phase 6 Refactoring: Simplified to use keyResolver instead of manual key iteration
  */
 
-import { KeyMetadata, AIProviderId } from "../../models/metadata";
+import { KeyMetadata, AIProviderId } from "../../models";
 import { vaultService } from "../vault/vault.service";
 import { safetyGuard, type CircuitState } from "../safety";
 import { retryService } from "../policies/retry.policy";

@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { llmClient } from "../../core/unified-llm.client";
 import { resilientHandler } from "../../services/engines/resilience.engine";
 import { keyResolver } from "../../services/availability";
-import { ChatRequest } from "../../models/workloads";
+import { ChatRequest } from "../../models";
 import * as ProviderRegistry from "../../providers/provider.registry";
 import { IProviderAdapter } from "../../providers/types";
 import { configService } from "../../services/config.service";

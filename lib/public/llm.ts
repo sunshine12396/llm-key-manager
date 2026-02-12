@@ -11,7 +11,7 @@ import {
   TextToSpeechRequest,
   TextToSpeechResponse,
 } from "./types";
-import { AIProviderId, LLMManagerConfig } from "../models/metadata";
+import { AIProviderId, LLMManagerConfig } from "../models";
 
 /**
  * Public LLM Client

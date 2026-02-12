@@ -1,10 +1,10 @@
 import { IProviderAdapter, KeyFormatValidationResult } from "../types";
-import { ChatRequest, ChatResponse } from "../../models/workloads";
+import { ChatRequest, ChatResponse } from "../../models";
 import {
   RateLimitData,
   AIProviderId,
   ModelCapability,
-} from "../../models/metadata";
+} from "../../models";
 import { modelDataService } from "../../services/model-data.service";
 import { createTypedError } from "../../core/errors";
 
@@ -21,7 +21,7 @@ import {
   AudioTranscriptionResponse,
   TextToSpeechRequest,
   TextToSpeechResponse,
-} from "../../models/workloads/multimodal";
+} from "../../models";
 
 export class AnthropicPlugin implements IProviderAdapter {
   readonly providerId: AIProviderId = "anthropic";

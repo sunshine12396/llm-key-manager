@@ -1,6 +1,6 @@
 import { db } from '../../db/schema';
 import { CryptoService } from './crypto.service';
-import { StoredKey, KeyMetadata, AIProviderId, KeyVerificationStatus } from '../../models/metadata';
+import { StoredKey, KeyMetadata, AIProviderId, KeyVerificationStatus } from '../../models';
 import { v4 as uuidv4 } from 'uuid';
 
 export class VaultService {

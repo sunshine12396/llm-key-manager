@@ -1,5 +1,4 @@
-import { useSafetyGuard, useLLMKeyManager } from '../../../../lib';
-import type { AIProviderId } from '../../../../lib/models/types';
+import { useSafetyGuard, useLLMKeyManager, AIProviderId } from '../../../../lib';
 import {
     Shield,
     ShieldOff,

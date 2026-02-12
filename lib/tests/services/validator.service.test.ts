@@ -13,7 +13,10 @@ vi.mock("../../db", () => ({
         modelCache: {
             where: vi.fn().mockReturnThis(),
             equals: vi.fn().mockReturnThis(),
+            and: vi.fn().mockReturnThis(),
             modify: vi.fn().mockResolvedValue(undefined),
+            get: vi.fn().mockResolvedValue(undefined),
+            toArray: vi.fn().mockResolvedValue([]),
         },
     },
 }));

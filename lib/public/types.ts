@@ -3,7 +3,12 @@ import {
   RateLimitData,
   KeyVerificationStatus,
   LLMManagerConfig,
-} from "../models/metadata";
+  KeyMetadata,
+  VerifiedModelMetadata,
+  ModelState,
+  ModelCapability,
+  ModelPriority,
+} from "../models";
 import {
   ChatRequest,
   ChatResponse,
@@ -18,7 +23,7 @@ import {
   TextToSpeechResponse,
   ToolDefinition,
   ToolCall,
-} from "../models/workloads";
+} from "../models";
 
 export type {
   AIProviderId,
@@ -38,6 +43,11 @@ export type {
   TextToSpeechResponse,
   ToolDefinition,
   ToolCall,
+  KeyMetadata,
+  VerifiedModelMetadata,
+  ModelState,
+  ModelCapability,
+  ModelPriority,
 };
 
 /**

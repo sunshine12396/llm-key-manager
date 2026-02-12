@@ -7,7 +7,7 @@ import {
   AudioTranscriptionResponse,
   TextToSpeechRequest,
   TextToSpeechResponse,
-} from "../../../models/workloads/multimodal";
+} from "../../../models";
 import { createOpenAIClient } from "../client";
 import { parseOpenAIError } from "./errors";
 

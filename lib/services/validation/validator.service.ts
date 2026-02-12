@@ -17,7 +17,7 @@ import type {
   ValidationTask,
 } from "./validation.types";
 import { DEFAULT_VALIDATION_CONFIG } from "./validation.types";
-import { modelMetadataService } from "../engines/model-discovery.service";
+import { availabilityManager } from "../availability";
 import { availabilityCache } from "../availability/availability.cache";
 import { calculateRetry } from "../availability/retry-strategy";
 
@@ -148,15 +148,15 @@ export class ValidatorService {
   // ============================================
 
   async getAllAvailableModels() {
-    return modelMetadataService.queryAvailableModels({});
+    return availabilityManager.queryAvailableModels({});
   }
 
   async getModelsForKey(keyId: string) {
-    return modelMetadataService.getModelsForKey(keyId);
+    return availabilityManager.getModelsForKey(keyId);
   }
 
   async isModelAvailable(keyId: string, modelId: string) {
-    return modelMetadataService.isModelAvailable(keyId, modelId);
+    return availabilityManager.isModelUsable(keyId, modelId);
   }
 
   /**
@@ -324,7 +324,7 @@ export class ValidatorService {
   }
 
   private async finalizeValidation(task: ValidationTask, results: import("../../models/types").VerifiedModelMetadata[], totalDiscovered: number) {
-    await modelMetadataService.saveModelMetadataBatch(results);
+    await availabilityManager.saveModelMetadataBatch(results);
 
     const successCount = results.filter(r => r.state === "AVAILABLE").length;
     const isValid = successCount > 0;

@@ -1,4 +1,4 @@
-import { ModelCapability } from '../models/metadata';
+import { ModelCapability } from '../models';
 import { configService } from './config.service';
 import { modelDataService } from './model-data.service';
 

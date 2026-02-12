@@ -89,44 +89,58 @@ npm install @anthropic-ai/sdk @google/generative-ai openai dexie uuid zod clsx t
 npm install -D @types/uuid
 ```
 
-#### Step 3: Usage (React)
-Now you can import the hooks and services directly in your application.
+### 3. Usage (React)
+
+Wrap your application with the `LLMKeyManagerProvider` to enable background validation and provide context to UI components.
 
 ```tsx
-import { useLLM, vault } from '@/lib/llm-key-manager';
+import { LLMKeyManagerProvider, useLLM, KeyListDashboard } from '@/lib/llm-key-manager';
+
+function Root() {
+  return (
+    <LLMKeyManagerProvider>
+      <App />
+    </LLMKeyManagerProvider>
+  );
+}
 
 function App() {
   const { chat, isLoading } = useLLM();
 
   const handlePrompt = async () => {
-    // 1. Add a key (usually via a UI form)
-    await vault.addKey('openai', 'sk-...', 'Primary Key', 'high');
-
-    // 2. Chat using a logical alias
+    // Chat using a logical alias - automatic failover & routing included
     const response = await chat({
-      model: 'fast',
-      messages: [{ role: 'user', content: 'Explain quantum physics simply.' }]
+      model: 'smart',
+      messages: [{ role: 'user', content: 'Design a resilient system architecture.' }]
     });
 
     console.log(response.content);
   };
 
-  return <button onClick={handlePrompt}>Send Message</button>;
+  return (
+    <div>
+      <button onClick={handlePrompt} disabled={isLoading}>
+        {isLoading ? 'Processing...' : 'Send Logic'}
+      </button>
+      
+      {/* Drop-in Management Dashboard */}
+      <KeyListDashboard />
+    </div>
+  );
 }
 ```
 
-### 3. Direct Usage (Non-React)
+### 4. Direct Usage (Non-React)
+
+For backend-lite or vanilla JS environments:
 
 ```typescript
 import { llmClient, vault } from '@/lib/llm-key-manager';
 
-// Unlock the vault
-await vault.unlock('optional-passphrase');
-
-// Execute request with automatic failover
+// Execute request with automatic failover and smart model resolution
 const result = await llmClient.chat({
-    model: 'gpt-4o',
-    messages: [...]
+    model: 'fast',
+    messages: [{ role: 'user', content: 'Ping' }]
 });
 ```
 
@@ -134,6 +148,8 @@ const result = await llmClient.chat({
 
 ## 📖 Documentation
 
+-   [**Developer Guide**](./docs/DEVELOPMENT.md) - Internal architecture and model lifecycle.
+-   [**API Reference**](./docs/API_REFERENCE.md) - Detailed methods and type definitions.
 -   [**Security & Privacy**](./docs/features/security.md) - How we protect your data.
 -   [**Smart Routing & Failover**](./docs/features/routing.md) - Deep dive into key selection.
 -   [**Discovery & Health**](./docs/features/discovery.md) - The state machine and validation.

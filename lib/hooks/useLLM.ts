@@ -6,8 +6,8 @@ import {
   ImageGenerationRequest,
   AudioTranscriptionRequest,
   TextToSpeechRequest,
-} from "../models/workloads";
-import { AIProviderId } from "../models/metadata";
+} from "../models";
+import { AIProviderId } from "../models";
 
 export function useLLM() {
   const [isLoading, setIsLoading] = useState(false);

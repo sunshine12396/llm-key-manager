@@ -1,4 +1,4 @@
-import { AIProviderId, ModelCapability, RateLimitData } from '../models/metadata';
+import { AIProviderId, ModelCapability, RateLimitData } from '../models';
 import { 
     ChatRequest, 
     ChatResponse,
@@ -10,7 +10,7 @@ import {
     AudioTranscriptionResponse,
     TextToSpeechRequest,
     TextToSpeechResponse
-} from '../models/workloads';
+} from '../models';
 
 export interface AIModel {
     id: string;
