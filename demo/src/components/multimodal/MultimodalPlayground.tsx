@@ -6,45 +6,45 @@ import { TTSCard } from './components/TTSCard';
 import { Sparkles, Zap, Layers } from 'lucide-react';
 
 export const MultimodalPlayground: React.FC = () => {
-    const { 
-        isLoading, 
-        error, 
-        generateImage, 
-        embeddings, 
-        textToSpeech 
+    const {
+        isLoading,
+        error,
+        generateImage,
+        embeddings,
+        textToSpeech
     } = useLLM();
 
     return (
-        <div className="relative min-h-screen py-10">
+        <div className="relative">
             {/* Background Orbs for 'Vibe' */}
-            <div className="absolute top-0 right-0 -z-10 w-96 h-96 bg-indigo-500/10 blur-[120px] rounded-full animate-pulse" />
-            <div className="absolute bottom-0 left-0 -z-10 w-96 h-96 bg-emerald-500/10 blur-[120px] rounded-full" />
+            <div className="absolute top-0 right-0 -z-10 w-96 h-96 bg-indigo-500/5 blur-[120px] rounded-full animate-pulse" />
+            <div className="absolute bottom-0 left-0 -z-10 w-96 h-96 bg-emerald-500/5 blur-[120px] rounded-full" />
 
             {/* Header Section */}
             <div className="mb-12 space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100/50 text-indigo-600 text-[10px] font-black uppercase tracking-[0.2em] animate-in slide-in-from-top-4 duration-700">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[9px] font-black uppercase tracking-[0.2em] animate-in slide-in-from-top-4 duration-700 shadow-lg shadow-indigo-500/5">
                     <Sparkles className="w-3 h-3" />
-                    Multimodal Suite
+                    Neural Capabilities Suite
                 </div>
-                <h2 className="text-4xl font-black text-slate-800 tracking-tighter sm:text-5xl animate-in slide-in-from-top-8 duration-1000">
-                    Creative <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">Forge</span>
+                <h2 className="text-4xl font-black text-slate-50 tracking-tighter sm:text-5xl animate-in slide-in-from-top-8 duration-1000 uppercase">
+                    Creative <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-500">Engine</span>
                 </h2>
-                <p className="max-w-2xl text-slate-500 font-medium leading-relaxed">
-                    Unleash the full power of multimodal AI. Generate stunning imagery, 
-                    vectorize intelligence for RAG, and breathe life into text with neural speech.
+                <p className="max-w-2xl text-slate-400 font-medium leading-relaxed text-sm">
+                    Access high-tier multimodal endpoints. Generate visual assets,
+                    vectorize data for intelligence pipelines, and synthesize neural audio streams.
                 </p>
             </div>
 
-            {/* Main Content Layout - 'Broken'/Dynamic Grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-                
-                {/* Image Gen - Primary Block */}
+            {/* Main Content Layout */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10 items-start">
+
+                {/* Capabilities Blocks */}
                 <div className="xl:col-span-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                         <div className="lg:col-span-1 h-full">
                             <ImageGenCard generateImage={generateImage} isLoading={isLoading} />
                         </div>
-                        
+
                         <div className="lg:col-span-1 h-full">
                             <EmbeddingCard embeddings={embeddings} isLoading={isLoading} />
                         </div>
@@ -56,19 +56,26 @@ export const MultimodalPlayground: React.FC = () => {
                 </div>
 
                 {/* Status/Capabilities Footer */}
-                <div className="xl:col-span-12 mt-8">
-                    <div className="flex flex-wrap gap-4 items-center p-6 bg-slate-900/5 backdrop-blur-md border border-slate-200/50 rounded-3xl">
-                        <div className="flex items-center gap-3 pr-6 border-r border-slate-200">
-                            <Zap className="w-4 h-4 text-amber-500" />
-                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Low Latency APIs</span>
+                <div className="xl:col-span-12">
+                    <div className="flex flex-wrap gap-8 items-center p-8 bg-slate-950/20 backdrop-blur-md border border-slate-800 rounded-3xl group hover:border-indigo-500/20 transition-all duration-300">
+                        <div className="flex items-center gap-4 pr-8 md:border-r border-slate-800">
+                            <div className="p-2 bg-amber-500/10 rounded-lg">
+                                <Zap className="w-4 h-4 text-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.3)]" />
+                            </div>
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Low Latency Infrastructure</span>
                         </div>
-                        <div className="flex items-center gap-3 pr-6 border-r border-slate-200">
-                            <Layers className="w-4 h-4 text-indigo-500" />
-                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Multi-Provider Router</span>
+                        <div className="flex items-center gap-4 pr-8 md:border-r border-slate-800">
+                            <div className="p-2 bg-indigo-500/10 rounded-lg">
+                                <Layers className="w-4 h-4 text-indigo-400" />
+                            </div>
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Cross-Cloud Routing</span>
                         </div>
-                        <div className="ml-auto flex items-center gap-2">
-                             <div className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-600 text-[9px] font-bold">READY</div>
-                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <div className="md:ml-auto flex items-center gap-3 bg-emerald-500/5 px-4 py-2 rounded-2xl border border-emerald-500/10">
+                            <div className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">System Ready</div>
+                            <div className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -76,11 +83,13 @@ export const MultimodalPlayground: React.FC = () => {
 
             {/* Error Toast */}
             {error && (
-                <div className="fixed bottom-8 right-8 z-50 p-4 bg-red-600 text-white rounded-2xl shadow-2xl shadow-red-500/40 flex items-center gap-3 animate-in fade-in slide-in-from-right-8 duration-300">
-                    <Zap className="w-5 h-5 text-red-200" />
+                <div className="fixed bottom-8 right-8 z-50 p-5 bg-red-600/90 backdrop-blur-lg text-white rounded-2xl shadow-2xl shadow-red-500/40 border border-red-500/50 flex items-center gap-4 animate-in fade-in slide-in-from-right-8 duration-300">
+                    <div className="p-2 bg-white/10 rounded-xl">
+                        <Zap className="w-5 h-5 text-red-200" />
+                    </div>
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest">Engine Error</p>
-                        <p className="text-sm font-medium">{error.message}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-0.5">Engine Exception</p>
+                        <p className="text-sm font-bold tracking-tight">{error.message}</p>
                     </div>
                 </div>
             )}

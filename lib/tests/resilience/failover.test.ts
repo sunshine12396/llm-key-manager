@@ -153,7 +153,7 @@ describe("Resilience Engine - Failover & Routing", () => {
     expect(result.attempts).toBeGreaterThan(1);
 
     // Verification: Check if k1 was recorded as error
-    expect(keyResolver.markFailure).toHaveBeenCalledWith("k1", "");
+    expect(keyResolver.markFailure).toHaveBeenCalledWith("k1", "gpt-4");
     expect(safetyGuard.recordKeyFailure).toHaveBeenCalledWith("k1", "openai");
   });
 

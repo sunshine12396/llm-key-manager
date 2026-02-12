@@ -3,7 +3,6 @@ import { KeyMetadata, VerifiedModelMetadata } from "../../../models/types";
 import { keyRouter } from "../../../services";
 import useLLMKeyManager from "../../../hooks/useLLMKeyManager";
 import { AlertCircle, Loader2, Clock } from "lucide-react";
-import { CheckSquare, Square } from "lucide-react";
 import { Progress } from "../../ui";
 import { cn } from "../../../utils/cn";
 import { KeyRowHeader } from "./KeyRowHeader";
@@ -70,7 +69,7 @@ export const KeyRow: React.FC<KeyRowProps> = ({
   const availableCount =
     modelIds.length > 0
       ? Object.values(modelStatuses).filter((m) => m.state === "AVAILABLE")
-          .length
+        .length
       : keyData.verifiedModels?.length || 0;
 
   const incorrectCount = Object.values(modelStatuses).filter(
@@ -161,31 +160,42 @@ export const KeyRow: React.FC<KeyRowProps> = ({
   return (
     <div
       className={cn(
-        "group relative bg-white transition-all duration-300",
+        "group relative bg-slate-900 transition-all duration-300 overflow-hidden",
         isExpanded
-          ? "shadow-md rounded-xl z-10 border border-indigo-100 my-4"
-          : "hover:bg-slate-50/50 border-b border-gray-100 first:rounded-t-lg last:rounded-b-lg last:border-0",
-        keyData.isRevoked && "opacity-60 bg-gray-50",
-        !isActive && !keyData.isRevoked && "opacity-75 bg-slate-50/30",
+          ? "shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-xl z-10 border border-slate-700/50 my-4 bg-slate-800/80 backdrop-blur-md"
+          : "hover:bg-slate-800/40 border-b border-slate-800/50 first:rounded-t-lg last:rounded-b-lg last:border-0",
+        keyData.isRevoked && "opacity-60 bg-slate-950",
+        !isActive && !keyData.isRevoked && "opacity-75 bg-slate-900/50",
         isDeleting && "opacity-50 pointer-events-none scale-[0.98]",
-        selected && "bg-indigo-50/40 hover:bg-indigo-50/60",
+        selected && "bg-indigo-500/5 border-indigo-500/20",
       )}
     >
+      {/* Left Status Glow Strip */}
+      <div
+        className={cn(
+          "absolute left-0 top-0 bottom-0 w-1 transition-all duration-300",
+          keyData.verificationStatus === "valid" ? "bg-emerald-500 shadow-[2px_0_8px_rgba(16,185,129,0.3)]" :
+            keyData.verificationStatus === "testing" ? "bg-indigo-500 animate-pulse" :
+              keyData.verificationStatus === "invalid" ? "bg-red-500" : "bg-slate-700"
+        )}
+      />
+
       {/* Main Row */}
-      <div className="flex items-center gap-4 px-5 py-4">
-        {/* Checkbox */}
+      <div className="flex items-center gap-4 px-6 py-4.5">
+        {/* Checkbox with custom style */}
         <button
           onClick={onSelect}
           className={cn(
-            "transition-colors p-1 rounded-md",
-            selected ? "text-indigo-600" : "text-gray-300 hover:text-gray-500",
+            "transition-all duration-200 p-0.5 rounded-md flex items-center justify-center border-2 shrink-0",
+            selected
+              ? "bg-indigo-500 border-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]"
+              : "border-slate-700 text-transparent hover:border-slate-500 group-hover:border-slate-600"
           )}
         >
-          {selected ? (
-            <CheckSquare className="h-5 w-5" />
-          ) : (
-            <Square className="h-5 w-5" />
-          )}
+          <div className={cn(
+            "h-3.5 w-3.5 border-b-2 border-r-2 border-white rotate-45 transform -translate-y-[1px]",
+            !selected && "hidden"
+          )} />
         </button>
 
         {/* Key Header (Provider, Tier, Label) */}
@@ -196,10 +206,10 @@ export const KeyRow: React.FC<KeyRowProps> = ({
         />
 
         {/* Status & Quota Column */}
-        <div className="flex-1 min-w-0 flex items-center justify-start gap-6">
-          <div className="flex flex-col gap-1 min-w-[120px]">
+        <div className="flex-1 min-w-0 flex items-center justify-start gap-8">
+          <div className="flex flex-col gap-1.5 min-w-[140px]">
             {cooldown ? (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider border border-amber-100">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-black uppercase tracking-widest border border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.1)]">
                 <Clock className="h-3 w-3 animate-pulse" />
                 Ready in {cooldown}s
               </div>
@@ -209,9 +219,9 @@ export const KeyRow: React.FC<KeyRowProps> = ({
                   e.stopPropagation();
                   setIsExpanded(true);
                 }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider border border-red-100 hover:bg-red-100 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-[10px] font-black uppercase tracking-widest border border-red-500/20 hover:bg-red-500/20 transition-all shadow-[0_0_12px_rgba(239,68,68,0.1)] group/btn"
               >
-                <AlertCircle className="h-3 w-3" />
+                <AlertCircle className="h-3 w-3 group-hover/btn:scale-110 transition-transform" />
                 Invalid
               </button>
             ) : keyData.verificationStatus === "retry_scheduled" &&
@@ -221,18 +231,17 @@ export const KeyRow: React.FC<KeyRowProps> = ({
                   e.stopPropagation();
                   setIsExpanded(true);
                 }}
-                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider border border-amber-100 hover:bg-amber-100 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-black uppercase tracking-widest border border-amber-500/20 hover:bg-amber-500/20 transition-all group/btn"
               >
                 <Clock className="h-3 w-3 animate-pulse" />
                 Retrying...
               </button>
             ) : keyData.verificationStatus === "testing" || isRefreshing ? (
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase tracking-wider border border-indigo-100">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-black uppercase tracking-widest border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.15)]">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 {validationEvent?.type === "validation:model" ? (
                   <>
-                    Verifying ({validationEvent.current}/{validationEvent.total}
-                    )...
+                    Verifying ({(validationEvent as any).current}/{(validationEvent as any).total})
                   </>
                 ) : (
                   "Verifying..."
@@ -248,16 +257,17 @@ export const KeyRow: React.FC<KeyRowProps> = ({
                   isExpanded={isExpanded}
                   onToggleExpand={() => setIsExpanded(!isExpanded)}
                 />
-                {!!keyData.averageLatency && keyData.averageLatency > 0 && (
-                  <span className="text-[10px] font-bold text-slate-400 ml-2">
-                    ⚡ {keyData.averageLatency}ms AVG
+                {!!keyData?.averageLatency && keyData.averageLatency > 0 && (
+                  <span className="text-[9px] font-black text-slate-500/80 ml-2.5 uppercase tracking-tighter flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    {keyData.averageLatency}ms AVG
                   </span>
                 )}
               </div>
             ) : (
               <button
                 onClick={handleRefresh}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider border border-amber-100 hover:bg-amber-100 transition-colors"
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-700/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border border-slate-600/50 hover:bg-slate-700 transition-all"
               >
                 <AlertCircle className="h-3 w-3" />
                 Untested
@@ -266,15 +276,15 @@ export const KeyRow: React.FC<KeyRowProps> = ({
           </div>
 
           {/* Real-time Usage Bars */}
-          {hasModels && keyData.rateLimits && (
-            <div className="hidden lg:flex flex-col gap-2 w-48">
-              {keyData.rateLimits.requests && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[8px] font-bold text-slate-500 uppercase tracking-wider">
+          {hasModels && keyData?.rateLimits && (
+            <div className="hidden xl:flex flex-col gap-3 w-56">
+              {keyData.rateLimits?.requests && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[9px] font-black text-slate-500 uppercase tracking-widest">
                     <span>Requests</span>
-                    <span>
-                      {keyData.rateLimits.requests.remaining} /{" "}
-                      {keyData.rateLimits.requests.limit}
+                    <span className="text-slate-400">
+                      {keyData.rateLimits.requests.remaining.toLocaleString()} /{" "}
+                      {keyData.rateLimits.requests.limit.toLocaleString()}
                     </span>
                   </div>
                   <Progress
@@ -283,20 +293,21 @@ export const KeyRow: React.FC<KeyRowProps> = ({
                         keyData.rateLimits.requests.limit) *
                       100
                     }
-                    className="h-1 bg-slate-100"
-                    indicatorClassName={
-                      keyData.rateLimits.requests.remaining < 5
-                        ? "bg-red-500"
-                        : "bg-indigo-500"
-                    }
+                    className="h-1.5 bg-slate-800 rounded-full"
+                    indicatorClassName={cn(
+                      "transition-all duration-1000 ease-out",
+                      keyData.rateLimits.requests.remaining / keyData.rateLimits.requests.limit < 0.2
+                        ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]"
+                        : "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.3)]"
+                    )}
                   />
                 </div>
               )}
-              {keyData.rateLimits.tokens && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[8px] font-bold text-slate-500 uppercase tracking-wider">
+              {keyData.rateLimits?.tokens && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[9px] font-black text-slate-500 uppercase tracking-widest">
                     <span>Tokens</span>
-                    <span>
+                    <span className="text-slate-400">
                       {Math.round(keyData.rateLimits.tokens.remaining / 1000)}k
                       / {Math.round(keyData.rateLimits.tokens.limit / 1000)}k
                     </span>
@@ -307,8 +318,8 @@ export const KeyRow: React.FC<KeyRowProps> = ({
                         keyData.rateLimits.tokens.limit) *
                       100
                     }
-                    className="h-1 bg-slate-100"
-                    indicatorClassName="bg-emerald-500"
+                    className="h-1.5 bg-slate-800 rounded-full"
+                    indicatorClassName="bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)] transition-all duration-1000 ease-out"
                   />
                 </div>
               )}
@@ -317,43 +328,47 @@ export const KeyRow: React.FC<KeyRowProps> = ({
         </div>
 
         {/* Date */}
-        <div className="text-right w-24 flex-shrink-0 hidden sm:block">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">
+        <div className="text-right w-28 flex-shrink-0 hidden md:block">
+          <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">
             Added
           </p>
-          <p className="text-xs text-slate-500 font-semibold">
+          <p className="text-[11px] text-slate-400 font-bold font-mono">
             {formatCreatedDate(keyData.createdAt)}
           </p>
         </div>
 
         {/* Actions */}
-        <KeyRowActions
-          keyId={keyData.id}
-          isActive={isActive}
-          isRefreshing={isRefreshing}
-          onToggleActive={onToggleActive}
-          onRefresh={handleRefresh}
-          onCopyId={handleCopyId}
-          onEdit={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          onDelete={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          isCopied={copied}
-        />
+        <div className="pl-4 border-l border-slate-800/50">
+          <KeyRowActions
+            keyId={keyData.id}
+            isActive={isActive}
+            isRefreshing={isRefreshing}
+            onToggleActive={onToggleActive}
+            onRefresh={handleRefresh}
+            onCopyId={handleCopyId}
+            onEdit={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            onDelete={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            isCopied={copied}
+          />
+        </div>
       </div>
 
       {/* Expanded Details Row */}
       {isExpanded && (
-        <KeyRowModelList
-          keyData={keyData}
-          modelStatuses={modelStatuses}
-          now={now}
-          isActive={isActive}
-        />
+        <div className="border-t border-slate-700/30 bg-slate-900/40">
+          <KeyRowModelList
+            keyData={keyData}
+            modelStatuses={modelStatuses}
+            now={now}
+            isActive={isActive}
+          />
+        </div>
       )}
     </div>
   );

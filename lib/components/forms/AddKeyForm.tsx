@@ -168,7 +168,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Success message */}
         {addedSuccessfully && (
-          <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-start gap-3 text-emerald-700 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 text-emerald-400 animate-in fade-in slide-in-from-top-2 duration-300">
             <CheckCircle className="h-5 w-5 flex-shrink-0" />
             <div>
               <p className="text-sm font-bold">Key Added Successfully!</p>
@@ -182,7 +182,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
 
         {/* Error message */}
         {error && (
-          <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-700 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400 animate-in fade-in slide-in-from-top-2 duration-300">
             <CheckCircle className="h-5 w-5 flex-shrink-0 rotate-45" />
             <div>
               <p className="text-sm font-bold">Error adding key</p>
@@ -193,7 +193,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
 
         {/* Info banner */}
         {!addedSuccessfully && (
-          <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-start gap-3 text-indigo-700">
+          <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-start gap-3 text-indigo-400">
             <Zap className="h-4 w-4 flex-shrink-0 mt-0.5" />
             <p className="text-[11px] font-medium leading-relaxed">
               Keys are validated in the background after adding. You'll be
@@ -205,7 +205,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
         <div className="space-y-6">
           {/* Provider Selection */}
           <div>
-            <Label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-3 block">
+            <Label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-3 block">
               SELECT PROVIDER
             </Label>
             <div className="grid grid-cols-3 gap-3">
@@ -218,8 +218,8 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
                   className={cn(
                     "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all duration-300 group",
                     provider === id
-                      ? "border-indigo-600 bg-indigo-50 shadow-sm ring-1 ring-indigo-600"
-                      : "border-slate-100 bg-slate-50/50 hover:border-indigo-200 hover:bg-slate-50 text-slate-500",
+                      ? "border-indigo-500 bg-indigo-500/10 shadow-sm ring-1 ring-indigo-500/50"
+                      : "border-slate-700 bg-slate-800/50 hover:border-indigo-500/50 hover:bg-slate-800 text-slate-400",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
                   )}
                 >
@@ -227,10 +227,10 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
                     className={cn(
                       "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow-sm transition-transform group-hover:scale-110",
                       id === "openai"
-                        ? "bg-emerald-100 text-emerald-700"
+                        ? "bg-emerald-500/20 text-emerald-400"
                         : id === "anthropic"
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-indigo-100 text-indigo-700",
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-indigo-500/20 text-indigo-400",
                     )}
                   >
                     {config.icon}
@@ -238,7 +238,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
                   <span
                     className={cn(
                       "text-[10px] font-bold uppercase tracking-wider",
-                      provider === id ? "text-indigo-700" : "text-slate-500",
+                      provider === id ? "text-indigo-400" : "text-slate-500",
                     )}
                   >
                     {config.name}
@@ -250,7 +250,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2 block">
+              <Label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2 block">
                 KEY LABEL
               </Label>
               <div className="relative group">
@@ -266,7 +266,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
                   type="button"
                   onClick={handleAutoGenerateLabel}
                   disabled={key.length <= 4 || isSubmitting}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition p-1.5 hover:bg-slate-100 rounded-md disabled:opacity-30 disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-400 transition p-1.5 hover:bg-slate-800 rounded-md disabled:opacity-30 disabled:hover:text-slate-500 disabled:hover:bg-transparent"
                   title="Auto-generate label"
                 >
                   <Wand2 className="h-4 w-4" />
@@ -274,7 +274,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
               </div>
             </div>
             <div>
-              <Label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2 block">
+              <Label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2 block">
                 PRIORITY
               </Label>
               <select
@@ -283,7 +283,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
                   setPriority(e.target.value as "high" | "medium" | "low")
                 }
                 disabled={isSubmitting}
-                className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/20 transition-all hover:border-indigo-200 disabled:opacity-50"
+                className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/20 transition-all hover:border-indigo-500/50 disabled:opacity-50"
               >
                 <option value="high">HIGH PRIORITY ⚡</option>
                 <option value="medium">MEDIUM PRIORITY</option>
@@ -293,7 +293,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
           </div>
 
           <div>
-            <Label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2 block">
+            <Label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2 block">
               <div className="flex justify-between items-center">
                 <span>API KEY SECRET</span>
                 {key.length > 0 && (
@@ -320,7 +320,7 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition p-1.5 hover:bg-slate-100 rounded-md"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition p-1.5 hover:bg-slate-800 rounded-md"
               >
                 {showKey ? (
                   <EyeOff className="h-4 w-4" />
@@ -330,8 +330,8 @@ export const AddKeyModal: React.FC<AddKeyModalProps> = ({
               </button>
             </div>
             <div className="mt-3 flex items-center justify-between">
-              <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+              <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5 uppercase tracking-wider">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
                 End-to-end Local Encryption
               </p>
             </div>

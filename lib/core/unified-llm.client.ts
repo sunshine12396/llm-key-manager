@@ -71,17 +71,28 @@ export class UnifiedLLMClient {
     let totalAttempts = 0;
 
     for (const modelId of fullModelChain) {
+      // Reset excluded keys for the new model in the chain
+      // optimization: if keyId X failed on model A, it might still work on model B? 
+      // usually if it's 429 quota, it fails for all models on that key.
+      // But let's be safe and clear distinct exclusions per model loop or keep global?
+      // Current logic: we want to exhaust keys for THIS model.
+      // If we keep excludedKeys global, we might skip a key that works for model B but failed for A.
+      // However, usually a key failure is key-wide (quota/auth).
+      // Let's use a local exclusion list for the current model loop.
+      const modelAttempts: string[] = [];
+
       // Loop until we exhaust keys for this model
       // eslint-disable-next-line no-constant-condition
       while (true) {
         // Find best key for this model
+        // We pass ALL globally failed keys + current attempts
         const resolved = await keyResolver.resolve(modelId, {
           providerId: options?.providerId,
-          excludeKeyIds: excludedKeys,
+          excludeKeyIds: [...excludedKeys, ...modelAttempts],
         });
 
         if (!resolved) {
-          // No more keys for this model, move to next model in chain
+          // No more keys for this specific model, move to next model in chain
           break;
         }
 
@@ -99,7 +110,7 @@ export class UnifiedLLMClient {
           // Success Handling
           availabilityManager
             .markModelAvailable(resolved.keyId, resolved.modelId)
-            .catch(() => {});
+            .catch(() => { });
           keyResolver.markSuccess(
             resolved.keyId,
             resolved.modelId,
@@ -115,7 +126,7 @@ export class UnifiedLLMClient {
           // Analytics
           // dynamically import to avoid circular dependency if any, or just use import
           // using existing structure
-          this.recordAnalytics(resolved, response, duration).catch(() => {});
+          this.recordAnalytics(resolved, response, duration).catch(() => { });
 
           return {
             ...response,
@@ -128,22 +139,29 @@ export class UnifiedLLMClient {
           const code = extractErrorCode(msg);
 
           // Error Handling
-          if (code) {
-            await availabilityManager.handleRuntimeError(
-              resolved.keyId,
-              resolved.modelId,
-              code,
-              msg,
-            );
+          await availabilityManager.handleRuntimeError(
+            resolved.keyId,
+            resolved.modelId,
+            code || 0,
+            msg,
+          );
+
+          // Mark failure in resolver cache immediately to avoid picking it again
+          // For 429/403 (Quota), the resolver marks it as COOLDOWN for this model.
+          keyResolver.markFailure(resolved.keyId, resolved.modelId);
+
+          // Add to local exclusion list so internal loop asks for next key
+          modelAttempts.push(resolved.keyId);
+
+          // If it's a HARD failure (Auth/Quota) or persistent error, add to global exclusion too
+          if (code === 401 || code === 403 || code === 429 || code === 500) {
+            excludedKeys.push(resolved.keyId);
           }
 
-          // Mark failure in resolver cache immediately to avoid picking it again in same loop
-          keyResolver.markFailure(resolved.keyId, resolved.modelId);
-          excludedKeys.push(resolved.keyId);
-
           console.warn(
-            `[UnifiedClient] Attempt ${totalAttempts} failed on ${resolved.modelId} (${resolved.providerId}): ${msg}`,
+            `[UnifiedClient] Attempt ${totalAttempts} failed on key ${resolved.keyId} (${resolved.modelId}): ${msg}`,
           );
+
 
           // Fatal errors?
           if (
@@ -172,7 +190,7 @@ export class UnifiedLLMClient {
     try {
       const { analyticsService } =
         await import("../services/analytics.service");
-      analyticsService.recordUsage({
+      await analyticsService.recordUsage({
         keyId: resolved.keyId,
         providerId: resolved.providerId,
         modelId: response.model,

@@ -49,11 +49,15 @@ export function getModelStatusInfo(
   const isFailed = state === "PERM_FAILED";
   const isChecking = state === "CHECKING" || state === "NEW";
 
-  let barColor = "bg-slate-200";
+  let barColor = "bg-slate-700";
   let statusText = "Pending...";
 
   if (state === "AVAILABLE") {
-    barColor = "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]";
+    barColor = "bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.4)]";
+    statusText = "Ready";
+  } else if (state === "AVAILABLE") {
+    // Duplicate check removed, keeping just one
+    barColor = "bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.4)]";
     statusText = "Ready";
   } else if (isCooldown) {
     barColor = "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]";
@@ -62,7 +66,7 @@ export function getModelStatusInfo(
     barColor = "bg-red-500";
     statusText = "Failed (Reached Max Retries)";
   } else if (isChecking) {
-    barColor = "bg-indigo-400 animate-pulse";
+    barColor = "bg-indigo-500 animate-pulse";
     statusText = "Checking";
   }
 

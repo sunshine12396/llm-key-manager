@@ -147,9 +147,9 @@ export const KeyListDashboard: React.FC = () => {
       {/* Toolbar */}
       <Card
         className={cn(
-          "border-slate-200/80 shadow-lg shadow-slate-200/50",
+          "border-slate-700 shadow-lg shadow-black/20",
           "sticky top-0 z-30",
-          "bg-white/95 backdrop-blur-xl",
+          "bg-slate-900/95 backdrop-blur-xl",
           "rounded-2xl overflow-hidden",
         )}
       >
@@ -169,7 +169,7 @@ export const KeyListDashboard: React.FC = () => {
                 "focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
                 selectedKeys.size === keys.length
                   ? "bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/30"
-                  : "bg-slate-50 border-slate-200 text-slate-400 hover:border-indigo-300 hover:text-indigo-500",
+                  : "bg-slate-800 border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-400",
               )}
               aria-label={
                 selectedKeys.size === keys.length
@@ -187,16 +187,16 @@ export const KeyListDashboard: React.FC = () => {
             {/* Search Input */}
             <div className="relative flex-1 md:w-72">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                <Search className="h-4 w-4 text-slate-400" />
+                <Search className="h-4 w-4 text-slate-500" />
               </div>
               <Input
                 placeholder="Search keys or providers..."
                 className={cn(
                   "pl-10 h-11",
-                  "bg-slate-50/80 border-slate-200/80",
-                  "rounded-xl",
-                  "placeholder:text-slate-400",
-                  "focus:bg-white focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10",
+                  "bg-slate-800/50 border-slate-700",
+                  "rounded-xl text-slate-200",
+                  "placeholder:text-slate-500",
+                  "focus:bg-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10",
                   "transition-all duration-200",
                 )}
                 value={searchQuery}
@@ -205,7 +205,7 @@ export const KeyListDashboard: React.FC = () => {
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
                 >
                   <span className="sr-only">Clear search</span>
                   <svg
@@ -235,7 +235,7 @@ export const KeyListDashboard: React.FC = () => {
                   variant="slate"
                   className={cn(
                     "h-11 px-5 text-sm font-semibold",
-                    "bg-slate-100 border-slate-200",
+                    "bg-slate-800 border-slate-700 text-slate-300",
                     "flex items-center gap-2",
                   )}
                 >
@@ -268,8 +268,8 @@ export const KeyListDashboard: React.FC = () => {
                   isLoading={isGloballyRefreshing}
                   className={cn(
                     "h-11 w-11 rounded-xl",
-                    "border-slate-200 bg-white",
-                    "hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600",
+                    "border-slate-700 bg-slate-800 text-slate-400",
+                    "hover:bg-indigo-500/10 hover:border-indigo-500/50 hover:text-indigo-400",
                     "transition-all duration-200",
                     isGloballyRefreshing && "animate-spin",
                   )}
@@ -284,7 +284,7 @@ export const KeyListDashboard: React.FC = () => {
                     "bg-gradient-to-r from-indigo-500 to-purple-500",
                     "hover:from-indigo-600 hover:to-purple-600",
                     "shadow-lg shadow-indigo-500/25",
-                    "border-0",
+                    "border-0 text-white",
                     "font-semibold",
                     "rounded-xl",
                     "transition-all duration-200",
@@ -304,45 +304,45 @@ export const KeyListDashboard: React.FC = () => {
       <Card
         className={cn(
           "overflow-hidden",
-          "border-slate-200/80",
-          "shadow-xl shadow-slate-200/40",
-          "rounded-2xl",
+          "border-slate-700",
+          "shadow-xl shadow-black/20",
+          "rounded-2xl bg-slate-900",
         )}
       >
         {/* Table Header */}
         <div
           className={cn(
             "hidden md:flex items-center gap-4",
-            "bg-gradient-to-r from-slate-50 to-slate-100/50",
-            "border-b border-slate-100",
+            "bg-slate-800",
+            "border-b border-slate-700",
             "px-5 py-4",
           )}
         >
           <div className="w-10" /> {/* Checkbox spacer */}
           <div className="w-56">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em]">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em]">
               Provider & Label
             </span>
           </div>
           <div className="flex-1">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em]">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em]">
               Status & Capabilities
             </span>
           </div>
           <div className="w-24 text-right">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em]">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em]">
               Created
             </span>
           </div>
           <div className="w-28">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em] text-center block">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] text-center block">
               Actions
             </span>
           </div>
         </div>
 
         {/* Key Rows */}
-        <div className="divide-y divide-slate-100/80">
+        <div className="divide-y divide-slate-800">
           {filteredKeys.length > 0 ? (
             filteredKeys.map((key, index) => (
               <div
@@ -367,17 +367,17 @@ export const KeyListDashboard: React.FC = () => {
           ) : (
             /* No Results State */
             <div className="flex flex-col items-center justify-center py-16 px-6">
-              <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-                <Search className="h-8 w-8 text-slate-300" />
+              <div className="h-16 w-16 rounded-2xl bg-slate-800 flex items-center justify-center mb-4">
+                <Search className="h-8 w-8 text-slate-600" />
               </div>
-              <p className="text-lg font-semibold text-slate-600 mb-1">
+              <p className="text-lg font-semibold text-slate-300 mb-1">
                 No keys found
               </p>
-              <p className="text-sm text-slate-400 text-center max-w-sm">
+              <p className="text-sm text-slate-500 text-center max-w-sm">
                 No keys match "{searchQuery}". Try a different search term or{" "}
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="text-indigo-500 hover:text-indigo-600 font-medium underline underline-offset-2"
+                  className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2"
                 >
                   clear the filter
                 </button>
@@ -389,14 +389,14 @@ export const KeyListDashboard: React.FC = () => {
 
         {/* Footer with count */}
         {filteredKeys.length > 0 && (
-          <div className="bg-slate-50/50 border-t border-slate-100 px-5 py-3 flex items-center justify-between">
-            <p className="text-xs text-slate-400">
+          <div className="bg-slate-800/50 border-t border-slate-700 px-5 py-3 flex items-center justify-between">
+            <p className="text-xs text-slate-500">
               Showing{" "}
-              <span className="font-semibold text-slate-600">
+              <span className="font-semibold text-slate-400">
                 {filteredKeys.length}
               </span>{" "}
               of{" "}
-              <span className="font-semibold text-slate-600">
+              <span className="font-semibold text-slate-400">
                 {keys.length}
               </span>{" "}
               keys
@@ -404,7 +404,7 @@ export const KeyListDashboard: React.FC = () => {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="text-xs text-indigo-500 hover:text-indigo-600 font-medium"
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
               >
                 Clear filter
               </button>

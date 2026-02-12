@@ -103,10 +103,22 @@ class KeyResolver {
     );
 
     if (matchingModels.length > 0) {
+      // Sort by priority (already sorted by availabilityCache, but good to be explicit for future)
+      // Return the best one
       return this.resolveFromCached(matchingModels[0]);
     }
 
-    // 6. If no exact match, find any usable model (for fallback chains)
+    // [STRICT MODE CHANGE]
+    // If we specifically requested a model (via options.preferredModelId or implicit alias),
+    // and we found NO matching keys for it, we must return NULL.
+    // We should NOT fallback to "anyUsable" here because that would select a different model.
+    // The UnifiedLLMClient loop handles trying the next model in the chain.
+    if (targetModelId) {
+      return null;
+    }
+
+    // 6. Only for generic requests (no specific model needed), pick any usable key
+    // This typically shouldn't happen in the new flow as we always have a model chain.
     const anyUsable = this.filterByExclusions(
       usableModels,
       options.excludeKeyIds,

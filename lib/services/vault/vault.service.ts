@@ -107,6 +107,14 @@ export class VaultService {
         await db.keys.update(id, updates);
     }
 
+    async getKeyMetadata(id: string): Promise<KeyMetadata | null> {
+        const record = await db.keys.get(id);
+        if (!record) return null;
+
+        const { encryptedData, iv, ...meta } = record;
+        return meta;
+    }
+
     async getKey(id: string): Promise<string> {
         if (!this.encryptionKey) throw new Error('Vault is locked');
 
@@ -210,7 +218,7 @@ export class VaultService {
         } catch (e) {
             console.warn('[VaultService] Failed to delete model entries for key', e);
         }
-        
+
         await db.keys.delete(id);
     }
 

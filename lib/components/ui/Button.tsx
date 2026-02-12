@@ -10,18 +10,18 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ({ className, variant = 'primary', size = 'md', isLoading, children, disabled, ...props }, ref) => {
         const variants = {
-            primary: "bg-slate-900 text-white hover:bg-slate-800 shadow-sm active:scale-95",
-            secondary: "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm active:scale-95",
-            ghost: "bg-transparent text-slate-600 hover:bg-slate-100",
-            outline: "bg-transparent border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300",
-            danger: "bg-red-50 text-red-600 hover:bg-red-100 border border-red-100"
+            primary: "bg-green-500 text-white hover:bg-green-600 shadow-sm active:scale-95 border border-green-600/20",
+            secondary: "bg-transparent text-slate-200 border-2 border-slate-700 hover:bg-slate-800 hover:border-slate-600 active:scale-95",
+            ghost: "bg-transparent text-slate-400 hover:text-white hover:bg-white/5 active:scale-95",
+            outline: "bg-transparent border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-600",
+            danger: "bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40"
         };
 
         const sizes = {
             sm: "px-3 py-1.5 text-xs",
-            md: "px-5 py-2 text-sm",
-            lg: "px-6 py-3 text-base",
-            icon: "p-2"
+            md: "px-6 py-3 text-sm font-semibold", // DS: 12px 24px
+            lg: "px-8 py-4 text-base font-bold",
+            icon: "p-2 aspect-square"
         };
 
         return (
@@ -30,9 +30,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                 disabled={disabled || isLoading}
                 aria-busy={isLoading}
                 className={cn(
-                    "inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none",
-                    variants[variant],
-                    sizes[size],
+                    "inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
+                    variants[variant as keyof typeof variants] || variants.primary,
+                    sizes[size as keyof typeof sizes] || sizes.md,
                     className
                 )}
                 {...props}

@@ -209,6 +209,11 @@
         "vision": "gpt-4o"
     },
     "fallbackChains": {
+        "gemini-2.5-flash": [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gpt-4o-mini"
+        ],
         "any": [
             "gemini-2.5-flash",
             "gemini-2.0-flash",

@@ -25,27 +25,27 @@ const variantConfig: Record<ConfirmDialogVariant, {
 }> = {
     danger: {
         icon: <Trash2 className="h-6 w-6" />,
-        iconBg: 'bg-red-100',
-        iconColor: 'text-red-600',
-        confirmButtonClass: 'bg-red-600 hover:bg-red-700 text-white shadow-red-500/25'
+        iconBg: 'bg-red-500/20',
+        iconColor: 'text-red-500',
+        confirmButtonClass: 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/10'
     },
     warning: {
         icon: <AlertTriangle className="h-6 w-6" />,
-        iconBg: 'bg-amber-100',
-        iconColor: 'text-amber-600',
-        confirmButtonClass: 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-500/25'
+        iconBg: 'bg-amber-500/20',
+        iconColor: 'text-amber-500',
+        confirmButtonClass: 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/10'
     },
     info: {
         icon: <Info className="h-6 w-6" />,
-        iconBg: 'bg-blue-100',
-        iconColor: 'text-blue-600',
-        confirmButtonClass: 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25'
+        iconBg: 'bg-blue-500/20',
+        iconColor: 'text-blue-500',
+        confirmButtonClass: 'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/10'
     },
     question: {
         icon: <HelpCircle className="h-6 w-6" />,
-        iconBg: 'bg-indigo-100',
-        iconColor: 'text-indigo-600',
-        confirmButtonClass: 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/25'
+        iconBg: 'bg-indigo-500/20',
+        iconColor: 'text-indigo-500',
+        confirmButtonClass: 'bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/10'
     }
 };
 
@@ -86,15 +86,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+                className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
                 onClick={isLoading ? undefined : onClose}
             />
 
             {/* Dialog */}
             <div
                 className={cn(
-                    "relative bg-white rounded-2xl shadow-2xl w-full max-w-md",
-                    "border border-slate-200/80",
+                    "relative bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md",
+                    "border border-slate-800",
                     "animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300",
                     "overflow-hidden"
                 )}
@@ -105,7 +105,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                     disabled={isLoading}
                     className={cn(
                         "absolute top-4 right-4 p-1.5 rounded-full",
-                        "text-slate-400 hover:text-slate-600 hover:bg-slate-100",
+                        "text-slate-500 hover:text-white hover:bg-slate-800",
                         "transition-colors duration-200",
                         isLoading && "opacity-50 cursor-not-allowed"
                     )}
@@ -132,12 +132,12 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                     </div>
 
                     {/* Title */}
-                    <h3 className="text-xl font-bold text-slate-900 text-center mb-2">
+                    <h3 className="text-xl font-bold text-slate-50 text-center mb-2">
                         {title}
                     </h3>
 
                     {/* Message */}
-                    <p className="text-slate-600 text-center text-sm leading-relaxed">
+                    <p className="text-slate-400 text-center text-sm leading-relaxed">
                         {message}
                     </p>
                 </div>
@@ -148,7 +148,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                         variant="outline"
                         onClick={onClose}
                         disabled={isLoading}
-                        className="flex-1 h-11 font-semibold border-slate-200 hover:bg-slate-50"
+                        className="flex-1 h-11 font-semibold border-slate-700 hover:bg-slate-800 text-slate-300"
                     >
                         {cancelText}
                     </Button>

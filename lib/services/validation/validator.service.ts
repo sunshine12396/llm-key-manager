@@ -31,8 +31,10 @@ export class ValidatorService {
   private listeners: ValidationEventListener[] = [];
   private schedulerInterval: ReturnType<typeof setTimeout> | null = null;
   private config = DEFAULT_VALIDATION_CONFIG;
-  private validationResults = new Map<string, ValidationEvent>();
   private activeJobs = new Set<string>();
+  private validationResults = new Map<string, ValidationEvent>();
+  private discoveryCache = new Map<string, { models: string[]; expiresAt: number }>();
+  private readonly DISCOVERY_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
   constructor() {
     // Start processing loop
@@ -48,13 +50,15 @@ export class ValidatorService {
    * Queue a key for validation
    */
   async queueValidation(keyId: string, priority: number = 1): Promise<void> {
+    if (this.isValidating(keyId)) {
+      console.log(`[ValidatorService] Key ${keyId} is already in validation pipeline, skipping queue`);
+      return;
+    }
+
     try {
-      const keys = await vaultService.listKeys();
-      const keyMeta = keys.find((k) => k.id === keyId);
+      const keyMeta = await vaultService.getKeyMetadata(keyId);
       if (!keyMeta) {
-        console.warn(
-          `[ValidatorService] Key ${keyId} not found, cannot validate`,
-        );
+        console.warn(`[ValidatorService] Key ${keyId} not found, cannot validate`);
         return;
       }
 
@@ -69,13 +73,8 @@ export class ValidatorService {
         priority,
         queuedAt: Date.now(),
       });
-
-      console.log(`[ValidatorService] Queued validation for ${keyMeta.label}`);
     } catch (e) {
-      console.error(
-        `[ValidatorService] Failed to queue validation for ${keyId}:`,
-        e,
-      );
+      console.error(`[ValidatorService] Failed to queue validation for ${keyId}:`, e);
     }
   }
 
@@ -89,14 +88,10 @@ export class ValidatorService {
 
       if (pending.length === 0) return;
 
-      console.log(
-        `[ValidatorService] Resuming ${pending.length} pending validations...`,
-      );
+      console.log(`[ValidatorService] Resuming ${pending.length} pending validations...`);
 
-      for (const key of pending) {
-        // Re-queue with high priority
-        await this.queueValidation(key.id, 2);
-      }
+      // Queue all pending validations in parallel without awaiting each individual queue
+      await Promise.all(pending.map(key => this.queueValidation(key.id, 2)));
     } catch (e) {
       console.error("[ValidatorService] Failed to resume validations:", e);
     }
@@ -226,155 +221,118 @@ export class ValidatorService {
   }
 
   private async executeTask(task: ValidationTask) {
+    const startTime = Date.now();
     this.emit({
       type: "validation:start",
       keyId: task.keyId,
       provider: task.providerId,
       label: task.label,
-      totalModels: 0, // Will be updated after discovery
+      totalModels: 0,
     });
 
-    // Mark key as verifying in vault
-    await vaultService.updateKey(task.keyId, { verificationStatus: "testing" });
-
-    // Get the provider adapter
-    const { getProviderAdapter } =
-      await import("../../providers/provider.registry");
-    const adapter = getProviderAdapter(task.providerId);
-
-    // Determine which models to check for this provider
-    // Priority: 1) modelsByProvider config, 2) dynamic discovery
-    let modelsForProvider: string[] = [];
     try {
-      modelsForProvider = await this.resolveModelsForProvider(
-        task.providerId,
-        task.apiKey,
-        adapter,
-      );
-    } catch (e: any) {
-      console.error(
-        `[ValidatorService] Discovery failed for ${task.label}:`,
-        e,
-      );
+      // 1. Mark as verifying
+      await vaultService.updateKey(task.keyId, { verificationStatus: "testing" });
 
-      const errorCode =
-        e.status ||
-        e.code ||
-        (typeof e.message === "string" && e.message.includes("429")
-          ? 429
-          : undefined);
-      const decision = calculateRetry(
-        errorCode ? Number(errorCode) : undefined,
-        e.message,
-        0, // Discovery retry count starts at 0
-      );
-
-      if (decision.shouldRetry) {
-        console.log(
-          `[ValidatorService] Scheduling retry for key ${task.label} in ${Math.round(decision.delayMs / 1000)}s`,
-        );
-        await vaultService.updateKey(task.keyId, {
-          verificationStatus: "retry_scheduled",
-          retryAfter: decision.nextRetryAt || undefined,
-        });
-      } else {
-        await vaultService.updateKey(task.keyId, {
-          verificationStatus: "invalid",
-        });
+      // 2. Resolve models
+      const modelsForProvider = await this.resolveModelsForProviderCached(task);
+      if (modelsForProvider.length === 0) {
+        await this.handleNoModels(task);
+        return;
       }
 
-      this.emit({
-        type: "validation:error",
-        keyId: task.keyId,
-        provider: task.providerId,
-        label: task.label,
-        error: e as Error,
-      });
-      return;
-    }
+      // 3. Initialize availability trackers
+      await this.initAvailability(task, modelsForProvider);
 
-    // Handle case where no models to check
-    if (modelsForProvider.length === 0) {
-      console.warn(
-        `[ValidatorService] No models configured for ${task.providerId}, marking key as untested`,
+      // 4. Run verification
+      const results = await modelVerifier.verifyBatch(
+        task.keyId,
+        task.apiKey,
+        modelsForProvider,
+        task.providerId,
+        task.label,
+        this.config.batchSize,
+        undefined,
+        (result, current, total) => this.handleBatchProgress(task, result, current, total)
       );
-      await vaultService.updateKey(task.keyId, {
-        verificationStatus: "untested",
-      });
-      this.emit({
-        type: "validation:error",
-        keyId: task.keyId,
-        provider: task.providerId,
-        label: task.label,
-        error: new Error(
-          `No models configured for provider ${task.providerId}`,
-        ),
-      });
-      return;
+
+      // 5. Finalize
+      await this.finalizeValidation(task, results, modelsForProvider.length);
+
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[ValidatorService] Validation completed for ${task.label} in ${duration}s`);
+    } catch (e) {
+      await this.handleTaskError(task, e);
+    }
+  }
+
+  private async handleNoModels(task: ValidationTask) {
+    console.warn(`[ValidatorService] No models for ${task.providerId}, marking key untested`);
+    await vaultService.updateKey(task.keyId, { verificationStatus: "untested" });
+    this.emit({
+      type: "validation:error",
+      keyId: task.keyId,
+      provider: task.providerId,
+      label: task.label,
+      error: new Error(`No models configured for provider ${task.providerId}`),
+    });
+  }
+
+  private async initAvailability(task: ValidationTask, models: string[]) {
+    // DEXIE Sync
+    const { availabilityManager } = await import("../availability");
+    await availabilityManager.initializeKeyModels(task.keyId, task.providerId, models);
+
+    // Initial state setup for Batch UI
+    await db.modelCache.where("keyId").equals(task.keyId).modify({ state: "CHECKING" });
+
+    // Memory Cache
+    availabilityCache.initializeKey(task.keyId, task.providerId, models);
+  }
+
+  private async handleBatchProgress(task: ValidationTask, result: import("../../models/types").VerifiedModelMetadata, current: number, total: number) {
+    this.emit({
+      type: "validation:model",
+      keyId: task.keyId,
+      provider: task.providerId,
+      label: task.label,
+      model: result.modelId,
+      status: result,
+      current,
+      total,
+    });
+
+    // Save increment + Update Availability
+    const { availabilityManager } = await import("../availability/availability.manager");
+    if (result.isAvailable) {
+      await availabilityManager.markModelAvailable(task.keyId, result.modelId);
+    } else {
+      // For background validation, 429 is handled by markUnusable globally
+      // but here we just update the specific model if it failed for other reasons
+      await availabilityManager.handleRuntimeError(
+        task.keyId,
+        result.modelId,
+        result.lastErrorCode || 0,
+        result.errorMessage || "Validation failed"
+      );
     }
 
-    console.log(
-      `[ValidatorService] Provider ${task.providerId} discovered ${modelsForProvider.length} models, initializing cache...`,
-    );
+    // Quick Activate: mark key 'valid' if any model works
+    if (result.isAvailable) {
+      vaultService.updateKey(task.keyId, { verificationStatus: "valid" }).catch(() => { });
+    }
+  }
 
-    // Initialize in Dexie immediately so UI shows total model count during verification
-    const { availabilityManager } = await import("../availability");
-    await availabilityManager.initializeKeyModels(
-      task.keyId,
-      task.providerId,
-      modelsForProvider,
-    );
-
-    // Mark them as CHECKING in the DB since executeTask is now verifying them
-    await db.modelCache
-      .where("keyId")
-      .equals(task.keyId)
-      .modify({ state: "CHECKING" });
-
-    // Initialize in-memory cache for the router
-    availabilityCache.initializeKey(
-      task.keyId,
-      task.providerId,
-      modelsForProvider,
-    );
-
-    // Run verification with only provider-appropriate models
-    const results = await modelVerifier.verifyBatch(
-      task.keyId,
-      task.apiKey,
-      modelsForProvider,
-      task.providerId,
-      task.label,
-      this.config.batchSize,
-      undefined,
-      (result, current, total) => {
-        this.emit({
-          type: "validation:model",
-          keyId: task.keyId,
-          provider: task.providerId,
-          label: task.label,
-          model: result.modelId,
-          status: result,
-          current,
-          total,
-        });
-      },
-    );
-
-    // Save results
+  private async finalizeValidation(task: ValidationTask, results: import("../../models/types").VerifiedModelMetadata[], totalDiscovered: number) {
     await modelMetadataService.saveModelMetadataBatch(results);
 
-    // Analyze outcome
-    const successCount = results.filter((r) => r.state === "AVAILABLE").length;
+    const successCount = results.filter(r => r.state === "AVAILABLE").length;
     const isValid = successCount > 0;
 
-    // Update key status
     await vaultService.updateKey(task.keyId, {
       verificationStatus: isValid ? "valid" : "invalid",
-      verifiedModels: results
-        .filter((m) => m.isAvailable)
-        .map((m) => m.modelId),
-      retryAfter: undefined, // Clear any discovery retry
+      verifiedModels: results.filter(m => m.isAvailable).map(m => m.modelId),
+      retryAfter: undefined,
     });
 
     this.emit({
@@ -384,23 +342,72 @@ export class ValidatorService {
       label: task.label,
       success: isValid,
       modelsFound: successCount,
-      totalModels: modelsForProvider.length,
+      totalModels: totalDiscovered,
     });
   }
 
-  private emit(event: ValidationEvent) {
-    // Record last result for successful/terminal events
-    if (
-      event.type === "validation:complete" ||
-      event.type === "validation:error"
-    ) {
-      this.validationResults.set(event.keyId, event);
-      this.activeJobs.delete(event.keyId);
-    } else if (event.type === "validation:start") {
-      this.activeJobs.add(event.keyId);
+  private async handleTaskError(task: ValidationTask, e: any) {
+    console.error(`[ValidatorService] Task failed for ${task.keyId}:`, e);
+
+    try {
+      await vaultService.updateKey(task.keyId, { verificationStatus: "invalid" });
+    } catch { }
+
+    this.emit({
+      type: "validation:error",
+      keyId: task.keyId,
+      provider: task.providerId,
+      label: task.label,
+      error: e as Error,
+    });
+  }
+
+  private async resolveModelsForProviderCached(task: ValidationTask): Promise<string[]> {
+    // 1. Check Config
+    const configured = this.config.modelsByProvider?.[task.providerId];
+    if (configured && configured.length > 0) return configured;
+
+    // 2. Check Discovery Cache
+    const cached = this.discoveryCache.get(task.providerId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.models;
     }
 
-    this.listeners.forEach((l) => l(event));
+    // 3. Dynamic Discovery
+    const { getProviderAdapter } = await import("../../providers/provider.registry");
+    const adapter = getProviderAdapter(task.providerId);
+
+    try {
+      const discovered = await adapter.listModels(task.apiKey);
+      if (discovered.length > 0) {
+        this.discoveryCache.set(task.providerId, {
+          models: discovered,
+          expiresAt: Date.now() + this.DISCOVERY_CACHE_TTL
+        });
+      }
+      return discovered;
+    } catch (e: any) {
+      this.handleDiscoveryError(task, e);
+      throw e;
+    }
+  }
+
+  private handleDiscoveryError(task: ValidationTask, e: any) {
+    const errorCode = e.status || e.code;
+    const decision = calculateRetry(
+      errorCode ? Number(errorCode) : undefined,
+      e.message,
+      0
+    );
+
+    if (decision.shouldRetry) {
+      vaultService.updateKey(task.keyId, {
+        verificationStatus: "retry_scheduled",
+        retryAfter: decision.nextRetryAt || undefined,
+      }).catch(() => { });
+    } else {
+      vaultService.updateKey(task.keyId, { verificationStatus: "invalid" }).catch(() => { });
+    }
   }
 
   private startWorker() {
@@ -417,54 +424,19 @@ export class ValidatorService {
     }, 60 * 1000);
   }
 
-  // ============================================
-  // MODEL RESOLUTION
-  // ============================================
-
-  /**
-   * Resolve which models to check for a provider.
-   * 2-tier fallback:
-   *   1) modelsByProvider config (preferred)
-   *   2) Dynamic discovery via adapter.listModels() (auto-discovery)
-   */
-  private async resolveModelsForProvider(
-    providerId: import("../../models/types").AIProviderId,
-    apiKey: string,
-    adapter: import("../../providers/types").IProviderAdapter,
-  ): Promise<string[]> {
-    // 1) Check provider-specific config
-    const configuredModels = this.config.modelsByProvider?.[providerId];
-    if (configuredModels && configuredModels.length > 0) {
-      console.log(
-        `[ValidatorService] Using configured models for ${providerId}:`,
-        configuredModels,
-      );
-      return configuredModels;
+  private emit(event: ValidationEvent) {
+    // Record last result for successful/terminal events
+    if (
+      event.type === "validation:complete" ||
+      event.type === "validation:error"
+    ) {
+      this.validationResults.set(event.keyId, event);
+      this.activeJobs.delete(event.keyId);
+    } else if (event.type === "validation:start") {
+      this.activeJobs.add(event.keyId);
     }
 
-    // 2) Dynamic discovery via API
-    console.log(
-      `[ValidatorService] No models configured for ${providerId}, attempting dynamic discovery...`,
-    );
-    try {
-      const discoveredModels = await adapter.listModels(apiKey);
-      if (discoveredModels.length > 0) {
-        console.log(
-          `[ValidatorService] Discovered ${discoveredModels.length} models for ${providerId}:`,
-          discoveredModels,
-        );
-        return discoveredModels;
-      }
-    } catch (error) {
-      console.error(
-        `[ValidatorService] Dynamic model discovery failed for ${providerId}:`,
-        error,
-      );
-      throw error; // Rethrow to allow executeTask to handle retry logic
-    }
-
-    // No models found
-    return [];
+    this.listeners.forEach((l) => l(event));
   }
 
   // ============================================

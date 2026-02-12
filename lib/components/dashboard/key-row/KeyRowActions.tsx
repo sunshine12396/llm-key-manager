@@ -31,9 +31,9 @@ export const KeyRowActions: React.FC<KeyRowActionsProps> = ({
   isCopied,
 }) => {
   return (
-    <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+    <div className="flex items-center gap-1.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
       {/* Primary Actions Group */}
-      <div className="flex bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex bg-slate-800/80 backdrop-blur-sm rounded-lg border border-slate-700/50 shadow-lg overflow-hidden p-0.5">
         {/* Toggle Active Button */}
         <Button
           variant="ghost"
@@ -43,10 +43,10 @@ export const KeyRowActions: React.FC<KeyRowActionsProps> = ({
             onToggleActive();
           }}
           className={cn(
-            "h-8 w-8 rounded-none border-r border-slate-100",
+            "h-8 w-8 rounded-md transition-all duration-200",
             isActive
-              ? "text-slate-400 hover:text-red-500 hover:bg-red-50"
-              : "text-slate-300 hover:text-indigo-500 hover:bg-indigo-50",
+              ? "text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
+              : "text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10",
           )}
           title={isActive ? "Deactivate" : "Activate"}
         >
@@ -60,10 +60,10 @@ export const KeyRowActions: React.FC<KeyRowActionsProps> = ({
           onClick={onRefresh}
           disabled={isRefreshing}
           className={cn(
-            "h-8 w-8 rounded-none",
+            "h-8 w-8 rounded-md transition-all duration-200",
             isRefreshing
-              ? "animate-spin"
-              : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50",
+              ? "animate-spin text-indigo-400"
+              : "text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10",
           )}
           title="Validate"
         >
@@ -72,17 +72,17 @@ export const KeyRowActions: React.FC<KeyRowActionsProps> = ({
       </div>
 
       {/* Secondary Actions Group */}
-      <div className="flex gap-1 ml-2">
+      <div className="flex items-center gap-0.5 bg-slate-800/40 rounded-lg p-0.5 border border-slate-800/50 ml-1">
         {/* Copy ID Button */}
         <Button
           variant="ghost"
           size="icon"
           onClick={onCopyId}
-          className="h-8 w-8 text-slate-400"
+          className="h-8 w-8 text-slate-500 hover:text-slate-200 hover:bg-slate-700/50 transition-colors"
           title="Copy ID"
         >
           {isCopied ? (
-            <Check className="h-3.5 w-3.5 text-emerald-500" />
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
           ) : (
             <Copy className="h-3.5 w-3.5" />
           )}
@@ -93,7 +93,7 @@ export const KeyRowActions: React.FC<KeyRowActionsProps> = ({
           variant="ghost"
           size="icon"
           onClick={onEdit}
-          className="h-8 w-8 text-slate-400"
+          className="h-8 w-8 text-slate-500 hover:text-slate-200 hover:bg-slate-700/50 transition-colors"
           title="Edit"
         >
           <Edit2 className="h-3.5 w-3.5" />
@@ -104,7 +104,7 @@ export const KeyRowActions: React.FC<KeyRowActionsProps> = ({
           variant="ghost"
           size="icon"
           onClick={onDelete}
-          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+          className="h-8 w-8 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
           title="Delete"
         >
           <Trash2 className="h-3.5 w-3.5" />

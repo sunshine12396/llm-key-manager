@@ -245,6 +245,23 @@ class AvailabilityCache {
     modelId: string,
     newState: ModelState = "TEMP_FAILED",
   ): void {
+    if (!modelId) {
+      // Mark ALL models for this key as unusable
+      const modelKeys = this.modelsByKey.get(keyId);
+      if (modelKeys) {
+        for (const cacheKey of modelKeys) {
+          const entry = this.cache.get(cacheKey);
+          if (entry) {
+            entry.isUsable = false;
+            entry.state = newState;
+            entry.lastUpdated = Date.now();
+            this.usableByProvider.get(entry.providerId)?.delete(cacheKey);
+          }
+        }
+      }
+      return;
+    }
+
     const cacheKey = this.getCacheKey(keyId, modelId);
     const existing = this.cache.get(cacheKey);
     if (!existing) return;

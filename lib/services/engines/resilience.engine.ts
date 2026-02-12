@@ -172,12 +172,12 @@ export class ResilientRequestHandler {
           };
         } else {
           lastError = result.error || new Error("Unknown error");
-          await this.handleError(resolved.keyMetadata, lastError);
+          await this.handleError(resolved.keyMetadata, lastError, resolved.modelId);
         }
       } catch (error) {
         totalAttempts++;
         lastError = error instanceof Error ? error : new Error(String(error));
-        await this.handleError(resolved.keyMetadata, lastError);
+        await this.handleError(resolved.keyMetadata, lastError, resolved.modelId);
       }
     }
 
@@ -246,7 +246,7 @@ export class ResilientRequestHandler {
   /**
    * Handle errors - update availability and safety state
    */
-  private async handleError(key: KeyMetadata, error: Error): Promise<void> {
+  private async handleError(key: KeyMetadata, error: Error, modelId?: string): Promise<void> {
     const errorMsg = error.message || "";
     const errorCode = extractErrorCode(errorMsg);
 
@@ -254,12 +254,12 @@ export class ResilientRequestHandler {
     if (errorCode === 429) {
       console.warn(`Key ${key.label} hit rate limit. Marking unavailable...`);
       safetyGuard.recordKeyFailure(key.id, key.providerId);
-      keyResolver.markFailure(key.id, "");
+      keyResolver.markFailure(key.id, modelId || "");
 
       // Use availabilityManager for consistent state updates
       await availabilityManager.handleRuntimeError(
         key.id,
-        "", // modelId unknown for generic requests
+        modelId || "",
         errorCode,
         errorMsg,
       );
@@ -274,9 +274,18 @@ export class ResilientRequestHandler {
     }
     // 3. Other Errors (5xx, Network)
     else {
+      console.warn(`Key ${key.label} encountered error: ${errorMsg}`);
       safetyGuard.recordKeyFailure(key.id, key.providerId);
       safetyGuard.recordProviderFailure(key.providerId);
-      keyResolver.markFailure(key.id, "");
+      keyResolver.markFailure(key.id, modelId || "");
+
+      // Ensure state machine is updated even for unknown/network errors
+      await availabilityManager.handleRuntimeError(
+        key.id,
+        modelId || "",
+        errorCode || 0,
+        errorMsg,
+      );
     }
 
     // Analytics logging

@@ -7,19 +7,19 @@ interface KeyUsageBarProps {
     color?: string;
 }
 
-export const KeyUsageBar: React.FC<KeyUsageBarProps> = ({ modelName, percentage, color = 'bg-blue-600' }) => {
+export const KeyUsageBar: React.FC<KeyUsageBarProps> = ({ modelName, percentage, color = 'bg-indigo-500' }) => {
     // Ensure percentage is between 0 and 100
     const clampedPercentage = Math.min(Math.max(percentage, 0), 100);
 
     return (
         <div className="w-full">
             <div className="flex justify-between mb-1">
-                <span className="text-xs font-medium text-gray-700">{modelName}</span>
-                <span className="text-xs font-medium text-gray-700">{Math.round(clampedPercentage)}%</span>
+                <span className="text-xs font-medium text-slate-300">{modelName}</span>
+                <span className="text-xs font-medium text-slate-400">{Math.round(clampedPercentage)}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                    className={`h-2 rounded-full ${color} transition-all duration-500`} 
+            <div className="w-full bg-slate-700 rounded-full h-2">
+                <div
+                    className={`h-2 rounded-full ${color} transition-all duration-500`}
                     style={{ width: `${clampedPercentage}%` }}
                 ></div>
             </div>

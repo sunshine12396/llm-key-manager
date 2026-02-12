@@ -51,12 +51,15 @@ export function classifyError(
     if (msg.includes("timeout") || msg.includes("timed out"))
       return "NETWORK_ERROR";
     if (
-      msg.includes("network") ||
+      msg.includes("fetch failed") ||
+      msg.includes("failed to fetch") ||
+      msg.includes("load failed") ||
+      msg.includes("connection") ||
       msg.includes("econnrefused") ||
-      msg.includes("enotfound")
+      msg.includes("etimedout") ||
+      msg.includes("enotfound") ||
+      msg.includes("net::err")
     )
-      return "NETWORK_ERROR";
-    if (msg.includes("fetch failed") || msg.includes("connection"))
       return "NETWORK_ERROR";
     if (
       msg.includes("unauthorized") ||

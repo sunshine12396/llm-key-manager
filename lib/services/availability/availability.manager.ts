@@ -21,6 +21,7 @@ import {
   type RetryDecision,
 } from "./retry-strategy";
 import { safetyGuard } from "../safety";
+import { availabilityCache } from "./availability.cache";
 
 // ============================================
 // MODEL PRIORITY CONFIGURATION
@@ -34,35 +35,35 @@ const MODEL_PRIORITY_PATTERNS: Array<{
   pattern: RegExp;
   priority: ModelPriority;
 }> = [
-  // Priority 5: Flagship models
-  { pattern: /gpt-4\.5/, priority: 5 },
-  { pattern: /gpt-4o(?!-mini)/, priority: 5 },
-  { pattern: /claude-3-5-sonnet/, priority: 5 },
-  { pattern: /gemini-2\.5-pro/, priority: 5 },
-  { pattern: /o1(?!-mini)/, priority: 5 },
-  { pattern: /o3(?!-mini)/, priority: 5 },
+    // Priority 5: Flagship models
+    { pattern: /gpt-4\.5/, priority: 5 },
+    { pattern: /gpt-4o(?!-mini)/, priority: 5 },
+    { pattern: /claude-3-5-sonnet/, priority: 5 },
+    { pattern: /gemini-2\.5-pro/, priority: 5 },
+    { pattern: /o1(?!-mini)/, priority: 5 },
+    { pattern: /o3(?!-mini)/, priority: 5 },
 
-  // Priority 4: Strong models
-  { pattern: /o3-mini/, priority: 4 },
-  { pattern: /gpt-4-turbo/, priority: 4 },
-  { pattern: /claude-3-opus/, priority: 4 },
-  { pattern: /gemini-2\.0-flash/, priority: 4 },
-  { pattern: /gemini-1\.5-pro/, priority: 4 },
+    // Priority 4: Strong models
+    { pattern: /o3-mini/, priority: 4 },
+    { pattern: /gpt-4-turbo/, priority: 4 },
+    { pattern: /claude-3-opus/, priority: 4 },
+    { pattern: /gemini-2\.0-flash/, priority: 4 },
+    { pattern: /gemini-1\.5-pro/, priority: 4 },
 
-  // Priority 3: Good everyday models
-  { pattern: /gpt-4o-mini/, priority: 3 },
-  { pattern: /gpt-3\.5-turbo/, priority: 3 },
-  { pattern: /claude-3-haiku/, priority: 3 },
-  { pattern: /gemini-2\.5-flash/, priority: 3 },
-  { pattern: /gemini-1\.5-flash/, priority: 3 },
+    // Priority 3: Good everyday models
+    { pattern: /gpt-4o-mini/, priority: 3 },
+    { pattern: /gpt-3\.5-turbo/, priority: 3 },
+    { pattern: /claude-3-haiku/, priority: 3 },
+    { pattern: /gemini-2\.5-flash/, priority: 3 },
+    { pattern: /gemini-1\.5-flash/, priority: 3 },
 
-  // Priority 2: Lightweight/experimental
-  { pattern: /o1-mini/, priority: 2 },
-  { pattern: /gemini-2\.0-flash-lite/, priority: 2 },
-  { pattern: /gemma/, priority: 2 },
+    // Priority 2: Lightweight/experimental
+    { pattern: /o1-mini/, priority: 2 },
+    { pattern: /gemini-2\.0-flash-lite/, priority: 2 },
+    { pattern: /gemma/, priority: 2 },
 
-  // Priority 1: Specialized/legacy (default)
-];
+    // Priority 1: Specialized/legacy (default)
+  ];
 
 // ============================================
 // AVAILABILITY MANAGER CLASS
@@ -334,6 +335,38 @@ export class KeyModelAvailabilityManager {
     errorMessage: string,
   ): Promise<ModelState> {
     const existing = await db.modelCache.get([modelId, keyId]);
+
+    // 1. Detect Rate Limit (429) - Apply to ALL models for this key
+    if (errorCode === 429) {
+      console.warn(`[Availability] Rate limit detected for ${keyId}. marking ALL models as COOLDOWN.`);
+
+      const retryDecision = this.calculateSmartRetry(
+        429,
+        errorMessage,
+        existing?.retryCount || 0,
+        existing?.modelPriority || 3
+      );
+
+      await db.modelCache.where("keyId").equals(keyId).modify({
+        isAvailable: false,
+        state: "COOLDOWN",
+        nextRetryAt: retryDecision.nextRetryAt,
+        lastErrorCode: 429,
+        errorMessage: retryDecision.reason,
+        lastCheckedAt: Date.now(),
+      });
+
+      availabilityCache.markUnusable(keyId, "", "COOLDOWN");
+
+      const { vaultService } = await import("../vault/vault.service");
+      await vaultService.updateKey(keyId, {
+        verificationStatus: "retry_scheduled",
+        retryAfter: retryDecision.nextRetryAt || undefined,
+      }).catch(() => { });
+
+      return "COOLDOWN";
+    }
+
     if (!existing) {
       console.warn(
         `[Availability] Cannot update non-existent entry: ${keyId}/${modelId}`,
@@ -368,6 +401,9 @@ export class KeyModelAvailabilityManager {
       lastCheckedAt: Date.now(),
     });
 
+    // Sync Cache
+    availabilityCache.markUnusable(keyId, modelId, newState);
+
     // ============================================
     // FLOW CORRECTNESS: Propagate to Key Status
     // ============================================
@@ -380,13 +416,6 @@ export class KeyModelAvailabilityManager {
       const { vaultService } = await import("../vault/vault.service");
       await vaultService.updateKey(keyId, {
         verificationStatus: "invalid",
-      });
-    } else if (newState === "COOLDOWN" && errorCode === 429) {
-      // If a key starts getting 429s, mark it as retry_scheduled at the key level too
-      const { vaultService } = await import("../vault/vault.service");
-      await vaultService.updateKey(keyId, {
-        verificationStatus: "retry_scheduled",
-        retryAfter: retryDecision.nextRetryAt || undefined,
       });
     }
 
@@ -441,6 +470,10 @@ export class KeyModelAvailabilityManager {
       errorMessage: undefined,
       lastCheckedAt: Date.now(),
     });
+
+    if (existing) {
+      availabilityCache.markUsable(keyId, modelId, existing.providerId, existing.modelPriority);
+    }
   }
 
   // ============================================
