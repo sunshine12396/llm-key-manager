@@ -15,14 +15,12 @@
         }
     },
     "scripts": {
-        "dev": "cd demo && vite",
-        "build:lib": "tsc && vite build --config vite.config.lib.ts",
-        "build:demo": "cd demo && vite build",
+        "build:lib": "tsc && vite build",
         "build": "pnpm build:lib",
         "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
         "test": "vitest run",
         "test:watch": "vitest",
-        "preview": "cd demo && vite preview"
+        "example": "tsx examples/basic-usage.ts"
     },
     "peerDependencies": {
         "react": "^18.2.0",
@@ -42,6 +40,7 @@
     },
     "devDependencies": {
         "@peculiar/webcrypto": "^1.5.0",
+        "@tailwindcss/vite": "^4.3.0",
         "@types/node": "^25.0.10",
         "@types/react": "^18.2.64",
         "@types/react-dom": "^18.2.21",
@@ -56,9 +55,10 @@
         "postcss": "^8.4.35",
         "scheduler": "0.23.2",
         "tailwindcss": "^3.4.1",
+        "tsx": "^4.21.0",
         "typescript": "^5.2.2",
-        "vite": "^5.1.5",
+        "vite": "^8.0.12",
         "vite-plugin-dts": "^3.9.1",
-        "vitest": "^4.0.18"
+        "vitest": "^4.1.6"
     }
 }

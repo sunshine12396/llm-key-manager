@@ -1,7 +1,7 @@
 # LLM Key Manager - Makefile
 # Common development commands
 
-.PHONY: install dev build clean lint test preview help
+.PHONY: install build clean lint test example ui-demo help
 
 # Default target
 help:
@@ -10,31 +10,23 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  install   - Install dependencies"
-	@echo "  dev       - Start development server"
-	@echo "  build     - Build for production"
-	@echo "  preview   - Preview production build"
-	@echo "  clean     - Remove build artifacts and node_modules"
-	@echo "  lint      - Run TypeScript type checking"
-	@echo "  format    - Format code with Prettier (if installed)"
-	@echo "  test      - Run tests (when available)"
+	@echo "  install    - Install dependencies"
+	@echo "  build      - Build the library for production"
+	@echo "  clean      - Remove build artifacts and node_modules"
+	@echo "  lint       - Run TypeScript type checking"
+	@echo "  format     - Format code with Prettier"
+	@echo "  test       - Run tests (Vitest)"
+	@echo "  example    - Run the basic usage example"
+	@echo "  ui-demo    - Launch the UI testing dashboard"
 	@echo ""
 
 # Install dependencies
 install:
 	pnpm install
 
-# Start development server
-dev:
-	pnpm run dev
-
 # Build for production
 build:
-	pnpm run build
-
-# Preview production build
-preview:
-	pnpm run preview
+	pnpm run build:lib
 
 # Run TypeScript type checking
 lint:
@@ -48,19 +40,27 @@ format:
 		echo "Prettier not installed. Run: pnpm add -D prettier"; \
 	fi
 
-# Run tests (placeholder)
+# Run tests
 test:
 	pnpm test
 
+# Run example
+example:
+	pnpm run example
+
+# UI Demo
+ui-demo:
+	cd examples/ui-demo && pnpm install && pnpm run dev
+
 # Clean build artifacts
 clean:
-	rm -rf dist node_modules .tsbuildinfo
+	rm -rf dist node_modules .tsbuildinfo examples/ui-demo/node_modules examples/ui-demo/dist
 
 # Full rebuild
 rebuild: clean install build
 
-# Development setup (first time)
+# Development setup
 setup: install
 	@echo ""
-	@echo "✅ Setup complete! Run 'make dev' to start developing."
+	@echo "✅ Setup complete! Run 'make build' or 'make test'."
 	@echo ""

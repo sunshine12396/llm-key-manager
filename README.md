@@ -1,160 +1,104 @@
-# 🗝️ AI Key Manager (Client-Only)
+# 🗝️ AI Key Manager (Hybrid AI Gateway)
+
+![AI Gateway Dashboard Mockup](./assets/screenshots/dashboard-mockup.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Privacy: Guaranteed](https://img.shields.io/badge/Privacy-Guaranteed-green.svg)](#security)
 [![Client-Only: True](https://img.shields.io/badge/Client--Only-True-blue.svg)](#-architecture)
 
-**A secure, browser-native library for resilient LLM integration.** Manage multiples keys, handle failovers, and optimize costs—without a backend.
+**A high-performance, browser-native AI Gateway for resilient LLM integration.** 
+Stop hardcoding model IDs. Manage multiple keys, automate failovers, and optimize routing—all with zero backend.
 
 ---
 
 ## 🚀 Why AI Key Manager?
 
-Integrating LLMs is easy, but managing **multiple keys**, **rate limits**, and **provider outages** is hard. AI Key Manager abstracts these complexities into a single, unified interface that runs entirely in your user's browser.
+Integrating LLMs is easy, but building a **production-grade gateway** with rate-limit handling, provider failover, and model cost-optimization is hard. This library provides a hardened, deterministic routing engine that runs entirely in your user's browser.
 
--   **Zero Backend Required**: Hardened security using Web Crypto API.
--   **Multi-Provider**: Unified support for **Google Gemini**, **OpenAI**, and **Anthropic**.
--   **Smart Failover**: Automatically switches keys on 429 (Rate Limit) or provider outages.
--   **Cost Optimized**: Intelligent routing based on key priority and model tiers.
+-   **Hybrid AI Gateway**: Strict separation between *Routing Policies* (abstract models like `smart`) and *Key Resolution* (physical API keys).
+-   **Effective Score Engine**: Real-time routing based on **Power Score**, **Health Bonus**, and **Latency Penalties**.
+-   **Zero Backend Required**: Hardened security using Web Crypto API and AES-256-GCM.
+-   **Sticky Routing**: Session-level persistence for consistent model/key pairs and context integrity.
+-   **Auto-Recovery**: Background `RetryScheduler` with exponential backoff for rate-limited or degraded keys.
+
+---
+
+## 🏗️ Architecture: The Hybrid Gateway
+
+Unlike simple wrappers, this system acts as a true gateway:
+
+1.  **Routing Policy Layer**: Resolves an abstract alias (e.g., `smart`) into a prioritized chain of physical models (e.g., `gpt-4o` → `claude-3-5-sonnet`).
+2.  **Availability Cache**: A high-performance, in-memory layer that tracks the real-time health and "Effective Score" of every key/model pair.
+3.  **Key Resolver**: Picks the highest-scoring physical key for the selected model in $O(1)$ time.
 
 ---
 
 ## ✨ Core Capabilities
 
 ### 🛡️ [Hardened Security](./docs/features/security.md)
-API keys are encrypted using **AES-256-GCM** before being saved to IndexedDB. They never leave the client.
+API keys are encrypted using **AES-256-GCM** before being saved to IndexedDB. They never leave the client and are only decrypted in-memory during active requests.
 
-### 🚦 [Smart Routing](./docs/features/routing.md)
-A sophisticated routing engine that factors in key health, model priority, and specific capabilities.
+### 🚦 [Effective Score Routing](./docs/features/routing.md)
+Deterministic selection using a multi-factor formula that ensures you always use the best available key:
+`Score = Power + Priority_Bonus + Health_Bonus - Latency_Penalty`
 
-### 🔍 [Autodiscovery](./docs/features/discovery.md)
-Automatically detects which models a key can access and monitors health in the background.
+-   **Power Score**: Base intelligence ranking (e.g., `o3`=100, `gpt-4o`=80, `gemini-pro`=85).
+-   **Priority Bonus**: User-defined tiering (`+20` for High, `-20` for Low).
+-   **Health Bonus**: Reward for consistent uptime; failure results in immediate heavy penalties.
+-   **Latency Penalty**: Real-time optimization; subtracts `1` point for every 10ms of average latency.
 
-### 🧠 [Logical Aliases](./docs/features/models.md)
-Stop hardcoding model version strings. Use `fast`, `smart`, or `coding` and let the manager resolve the best available model.
+### 🔄 [Resilient Failover](./docs/unified-api-flow.md)
+If a provider returns a `429` or `5xx`, the gateway transparently rotates to the next best key or fallback model in the chain without interrupting the user.
+
+### 📊 [Real-time Monitoring](./examples/ui-demo/)
+A premium dashboard component for monitoring key health, model availability, and background retry schedules in real-time.
 
 ---
 
-## 🛠️ Quick Start (Local Development)
-
-This project is currently in active development and not yet published to npm. You can integrate it by cloning the repository.
+## 🛠️ Quick Start
 
 ### 1. Setup
 
 ```bash
-# Clone the repository
+# Clone and setup
 git clone https://github.com/sunshine12396/llm-key-manager.git
 cd llm-key-manager
+make setup
 
-# Install dependencies
-pnpm install
-
-# Build the library
-pnpm build:lib
+# Run the UI Monitoring Dashboard
+make ui-demo
 ```
 
----
-
-## 🛠️ Development Commands
-
-This project uses a `Makefile` to simplify common development tasks.
-
-| Command | Description |
-| :--- | :--- |
-| `make setup` | Initial project setup (installs dependencies). |
-| `make dev` | Starts the development server for the /demo application. |
-| `make build` | Builds the library for production (`/dist`). |
-| `make test` | Runs the test suite (Vitest). |
-| `make lint` | Runs TypeScript type checking. |
-| `make clean` | Removes build artifacts and `node_modules`. |
-| `make rebuild` | Full clean start: `clean` + `install` + `build`. |
-
----
-
-### 2. Integration Guide
-
-Since this library is designed as a source-code module (similar to shadcn/ui), you integrate it by copying the core files directly into your project.
-
-#### Step 1: Copy the Library
-Copy the `lib/` directory from this repository into your project's source folder (e.g., `src/lib/llm-key-manager`).
-
-#### Step 2: Install Dependencies
-The library relies on several core packages for provider SDKs, database management, and utilities. Install them using your package manager:
-
-```bash
-# Core dependencies
-npm install @anthropic-ai/sdk @google/generative-ai openai dexie uuid zod clsx tailwind-merge lucide-react
-
-# Type definitions
-npm install -D @types/uuid
-```
-
-### 3. Usage (React)
-
-Wrap your application with the `LLMKeyManagerProvider` to enable background validation and provide context to UI components.
+### 2. Basic Usage (React)
 
 ```tsx
-import { LLMKeyManagerProvider, useLLM, KeyListDashboard } from '@/lib/llm-key-manager';
-
-function Root() {
-  return (
-    <LLMKeyManagerProvider>
-      <App />
-    </LLMKeyManagerProvider>
-  );
-}
+import { LLMKeyManagerProvider, useLLM } from 'llm-key-manager';
 
 function App() {
   const { chat, isLoading } = useLLM();
 
   const handlePrompt = async () => {
-    // Chat using a logical alias - automatic failover & routing included
+    // Uses Routing Policy 'smart' -> auto-resolves best key/model
     const response = await chat({
       model: 'smart',
-      messages: [{ role: 'user', content: 'Design a resilient system architecture.' }]
+      messages: [{ role: 'user', content: 'Explain quantum computing.' }]
     });
-
     console.log(response.content);
   };
 
-  return (
-    <div>
-      <button onClick={handlePrompt} disabled={isLoading}>
-        {isLoading ? 'Processing...' : 'Send Logic'}
-      </button>
-      
-      {/* Drop-in Management Dashboard */}
-      <KeyListDashboard />
-    </div>
-  );
+  return <button onClick={handlePrompt}>Ask AI</button>;
 }
-```
-
-### 4. Direct Usage (Non-React)
-
-For backend-lite or vanilla JS environments:
-
-```typescript
-import { llmClient, vault } from '@/lib/llm-key-manager';
-
-// Execute request with automatic failover and smart model resolution
-const result = await llmClient.chat({
-    model: 'fast',
-    messages: [{ role: 'user', content: 'Ping' }]
-});
 ```
 
 ---
 
 ## 📖 Documentation
 
--   [**Developer Guide**](./docs/DEVELOPMENT.md) - Internal architecture and model lifecycle.
--   [**API Reference**](./docs/API_REFERENCE.md) - Detailed methods and type definitions.
--   [**Security & Privacy**](./docs/features/security.md) - How we protect your data.
--   [**Smart Routing & Failover**](./docs/features/routing.md) - Deep dive into key selection.
--   [**Discovery & Health**](./docs/features/discovery.md) - The state machine and validation.
--   [**Model Management**](./docs/features/models.md) - Aliases and Fallback chains.
--   [**UI Components**](./docs/features/ui-components.md) - Drop-in dashboards and hooks.
+-   [**Unified API Flow**](./docs/unified-api-flow.md) - Deep dive into request execution.
+-   [**Developer Guide**](./docs/DEVELOPMENT.md) - Internal architecture and lifecycle.
+-   [**Smart Routing**](./docs/features/routing.md) - The Effective Score formula.
+-   [**Discovery & Health**](./docs/features/discovery.md) - Background validation logic.
+-   [**Model Management**](./docs/features/models.md) - Fallback chains and aliases.
 
 ---
 

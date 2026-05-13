@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-outfit: 'Outfit', sans-serif;
+
+  --color-background: #0a0a0b;
+  --color-card: #121214;
+  --color-accent-blue: #3b82f6;
+  --color-accent-purple: #8b5cf6;
+  --color-accent-pink: #ec4899;
+}
+
+@layer base {
+  body {
+    @apply antialiased selection:bg-accent-blue/30;
+  }
+}
+
+.glass {
+  @apply bg-card/60 backdrop-blur-xl border border-white/10 shadow-2xl;
+}
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-accent-blue via-accent-purple to-accent-pink;
+}

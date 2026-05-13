@@ -21,36 +21,40 @@ const response = await llmClient.chat({
 });
 ```
 
-## 3. Core Logic: Resilience & Routing
+## 3. Core Logic: AI Gateway Architecture
 
-When a request is made, the `UnifiedLLMClient` executes a robust strategy to ensure request success.
+The system uses a **Hybrid Model Routing Architecture** to provide deterministic, customizable, and resilient request execution. This architecture strictly separates the logic for finding the *best abstract model* from finding the *best actual API key*.
 
-### 3.1 Key Selection Algorithm
+### 3.1 Architecture Components
 
-The `KeyResolver` determines the best available key for each request using an O(1) in-memory lookup:
+1. **Model Registry (Static)**
+   - A static, code-shipped JSON registry mapping every known model to its provider, context window, and capability tags (e.g., `reasoning`, `coding`, `vision`).
+2. **Routing Policies (Dynamic/User-Customizable)**
+   - Defines the ordered fallback chains (e.g., `smart` -> `1. o3`, `2. claude-3.5-sonnet`, `3. gemini-2.0-flash`).
+   - Stored in the database, allowing users/admins to reorder models, create custom aliases, and override system defaults without changing application code.
+3. **Key-Level Scoring**
+   - Decouples model selection from key selection. Keys are evaluated based on their overall access level (`Power Score`) combined with runtime metrics.
+4. **Runtime Health Layer**
+   - Dynamically tracks latency, failure rates, rate limits (`429`), and circuit breaker states for both keys and providers.
 
-1.  **Cache Lookup**: Queries `availabilityCache` for all keys that support the requested model (e.g., `gpt-4`).
-2.  **Filtering**:
-    - **Excludes Disabled Keys**: Keys manually disabled by the user.
-    - **Excludes Unhealthy Keys**: Keys currently in a `COOLDOWN` (rate-limited) or `PERM_FAILED` state.
-    - **Excludes Tripped Circuits**: Keys whose failure rate has triggered the `SafetyGuard` circuit breaker.
-3.  **Ranking**:
-    - **Priority**: High priority keys are selected first.
-    - **Health**: Keys with recent successes are preferred.
+### 3.2 Runtime Flow & Scoring Algorithm
 
-### 3.2 Automatic Failover (Over-Quota Handling)
+When a request is made, the `UnifiedLLMClient` executes the following flow:
 
-If the selected key fails (e.g., hitting a quota limit), the system automatically switches to the next available key without interrupting the user.
+1. **Policy Resolution**: The request's `model` (e.g., `smart`) is expanded into an ordered list of models via the active Routing Policy.
+2. **Key Discovery**: For the highest-priority model in the chain, query the `availabilityCache` for all keys supporting it.
+3. **Health Filtering**: Exclude keys that are disabled, in `COOLDOWN` (rate-limited), or have an open `SafetyGuard` circuit.
+4. **Key Ranking (Effective Score)**: The remaining keys are sorted by an `Effective Score` formula:
+   ```text
+   Effective Score = Power Score + Health Bonus - Latency Penalty - Recent Failure Penalty
+   ```
+5. **Execution & Fallback**:
+   - The request is executed using the key with the highest effective score.
+   - If a failure occurs (e.g., Quota Exceeded), the key is immediately marked for cooldown, a penalty is applied, and the system transparently loops back to **Step 2** to find the next best key or fallback model in the chain.
 
-1.  **Error Detection**: The client detects a `429 Too Many Requests` or `403 Quota Exceeded` error.
-2.  **State Update**:
-    - The failed key-model pair is immediately marked as `COOLDOWN` in the `availabilityCache`.
-    - It will not be selected again for a standard cooldown period (e.g., 5 minutes or based on `Retry-After` headers).
-3.  **Retry Loop**:
-    - The system loops back to the **Key Selection** step.
-    - It requests a new key, explicitly excluding the one that just failed.
-    - This process repeats until a working key is found or all keys are exhausted.
-4.  **Sticky Routing**: Once a successful key is found, it is remembered for the duration of the session ("stickiness") to maintain consistency, unless it fails again.
+### 3.3 Sticky Routing
+
+Once a successful key and model combination is found, it is cached for the duration of the session ("stickiness") for that specific capability alias. This ensures consistent responses and context persistence, unless the chosen key/model subsequently fails.
 
 ## 4. Error Handling
 

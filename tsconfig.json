@@ -23,7 +23,7 @@
         "noFallthroughCasesInSwitch": true
     },
     "include": [
-        "lib"
+        "src"
     ],
     "references": [
         {
