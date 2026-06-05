@@ -26,6 +26,8 @@ Request → Safety Check → Key #1 → Retry(3x) → Success ✓
                          Return error with details
 ```
 
+Retries happen at the **key level**: transient failures are retried on the currently selected key using `RetryPolicy`. Rotation happens at the **request level**: once a key hits a non-retriable error (401/403/429) or exhausts its retries, the handler excludes that key and asks `KeyResolver` for the next available key, up to 5 keys.
+
 ## Error Classification
 
 | HTTP Code | Classification | Action |
@@ -71,19 +73,30 @@ Non-retriable errors (401, 403, 429) skip retries and immediately rotate to the 
 The `QuotaManager` tracks per-key token usage client-side:
 
 - **Cost estimation** using `MODEL_PRICING` data (per 1M tokens)
-- **Warning threshold** at 80% usage
-- **Critical threshold** at 95% usage
+- **Warning threshold** at 80% usage (`isAtWarning()`)
+- **Critical threshold** at 95% usage (`isCritical()`)
 - **Auto-reset** when quota period expires
 - Persisted to IndexedDB `quotas` table
 
+The 80% and 95% thresholds are currently helper signals for UI/UX warning states. The resilience engine's health check applies a hard stop at 100% quota usage (`quotaUsage < 1`) when deciding whether a key is healthy.
+
 ## Background Recovery
 
-The `RetryScheduler` (lifecycle module) runs periodic recovery:
+Recovery can be triggered by two schedulers:
 
-- **Interval**: 60 seconds
-- **Respects visibility**: Pauses when browser tab is hidden
-- **Recovery logic**: Re-checks `COOLDOWN` models by sending minimal test requests
-- **Stale data cleanup**: Removes models that no longer belong to a key's provider
+| Scheduler | Location | Interval | Visibility Behavior | Purpose |
+|:----------|:---------|:---------|:--------------------|:--------|
+| Lifecycle `model-recovery` job | `src/lifecycle/background-jobs.ts` | 5 minutes, with 10% jitter | Uses `pauseOnHidden: true`; also runs an immediate recovery pass when the tab becomes visible again | Central background recovery with lower API pressure |
+| Validator local interval | `src/services/validation/validator.service.ts` | 60 seconds | Runs only in browser clients (`window !== undefined`) but does not check `document.visibilityState` | Local periodic call to `retryScheduler.failoverRetry()` |
+
+Both paths call the same recovery logic:
+
+- Re-checks models whose cooldown/retry timers have elapsed
+- Sends minimal validation requests via `modelVerifier.verifyModel()`
+- Processes retry candidates sequentially to avoid rate-limit spikes
+- Removes models that no longer belong to a key's provider
+
+Visibility-aware pausing applies to the lifecycle scheduler, not to the validator's local 60-second interval.
 
 ## Key Files
 

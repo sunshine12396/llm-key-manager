@@ -221,7 +221,9 @@ class KeyResolver {
     providerId: AIProviderId,
     excludeKeyIds?: string[],
   ): Promise<ResolvedKey | null> {
-    const usable = availabilityCache.getUsableKeysForModel(providerId, modelId);
+    const usable = availabilityCache
+      .getUsableKeysForModel(modelId)
+      .filter((model) => model.providerId === providerId);
     const filtered = this.filterByExclusions(usable, excludeKeyIds);
     if (filtered.length === 0) return null;
     return this.resolveFromCached(filtered[0]);

@@ -195,6 +195,7 @@ class AnalyticsService {
 
   /**
    * Get hourly usage breakdown for charts
+   * @public Used by ui-demo dashboard.
    */
   getHourlyBreakdown(hours: number = 24): Array<{
     hour: string;
@@ -263,6 +264,7 @@ class AnalyticsService {
 
   /**
    * Clear all data
+   * @public Used by ui-demo dashboard.
    */
   async clearAll(): Promise<void> {
     try {

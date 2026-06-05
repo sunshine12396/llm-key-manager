@@ -15,12 +15,12 @@ describe('Advanced Key Management Features', () => {
     let vault: VaultService;
 
     beforeEach(async () => {
+        vi.restoreAllMocks();
+        localStorage.clear();
         await db.delete();
         await db.open();
         vault = new VaultService();
         await vault.unlock();
-        vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
-        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { });
     });
 
     it('should support adding multiple keys for the same provider', async () => {
@@ -63,6 +63,93 @@ describe('Advanced Key Management Features', () => {
 
         key = (await vault.listKeys()).find(k => k.id === id);
         expect(key?.priority).toBe('high');
+    });
+
+    it('should revoke a key without deleting it', async () => {
+        const id = await vault.addKey('openai', 'sk-revoke-test', 'Revoke Test');
+
+        await vault.revokeKey(id);
+
+        const metadata = await vault.getKeyMetadata(id);
+        expect(metadata).toBeDefined();
+        expect(metadata?.isRevoked).toBe(true);
+
+        const decrypted = await vault.getKey(id);
+        expect(decrypted).toBe('sk-revoke-test');
+    });
+
+    it('should delete associated model cache entries when deleting a key', async () => {
+        const id = await vault.addKey('openai', 'sk-cascade-test', 'Cascade Test');
+
+        await db.modelCache.bulkPut([
+            {
+                modelId: 'gpt-4o',
+                keyId: id,
+                providerId: 'openai',
+                isAvailable: true,
+                state: 'AVAILABLE',
+                lastCheckedAt: Date.now(),
+                modelPriority: 5,
+                retryCount: 0,
+                nextRetryAt: null
+            },
+            {
+                modelId: 'gpt-4o-mini',
+                keyId: id,
+                providerId: 'openai',
+                isAvailable: true,
+                state: 'AVAILABLE',
+                lastCheckedAt: Date.now(),
+                modelPriority: 3,
+                retryCount: 0,
+                nextRetryAt: null
+            },
+            {
+                modelId: 'claude-3-5-sonnet',
+                keyId: 'other-key',
+                providerId: 'anthropic',
+                isAvailable: true,
+                state: 'AVAILABLE',
+                lastCheckedAt: Date.now(),
+                modelPriority: 5,
+                retryCount: 0,
+                nextRetryAt: null
+            }
+        ]);
+
+        await vault.deleteKey(id);
+
+        expect(await db.keys.get(id)).toBeUndefined();
+        expect(await db.modelCache.where('keyId').equals(id).count()).toBe(0);
+        expect(await db.modelCache.where('keyId').equals('other-key').count()).toBe(1);
+    });
+
+    it('should update usage count and rolling average latency on successful requests', async () => {
+        const id = await vault.addKey('openai', 'sk-usage-test', 'Usage Test');
+
+        await vault.updateUsageStats(id, 100, true);
+
+        let metadata = await vault.getKeyMetadata(id);
+        expect(metadata?.usageCount).toBe(1);
+        expect(metadata?.averageLatency).toBe(100);
+        expect(metadata?.lastUsed).toBeTypeOf('number');
+
+        await vault.updateUsageStats(id, 200, true);
+
+        metadata = await vault.getKeyMetadata(id);
+        expect(metadata?.usageCount).toBe(2);
+        expect(metadata?.averageLatency).toBe(120);
+    });
+
+    it('should not increment usage count or latency on failed requests', async () => {
+        const id = await vault.addKey('openai', 'sk-usage-failure-test', 'Usage Failure Test');
+
+        await vault.updateUsageStats(id, 100, false);
+
+        const metadata = await vault.getKeyMetadata(id);
+        expect(metadata?.usageCount).toBe(0);
+        expect(metadata?.averageLatency).toBe(0);
+        expect(metadata?.lastUsed).toBeTypeOf('number');
     });
 
     it('should support bulk deletion of keys', async () => {

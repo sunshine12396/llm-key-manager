@@ -41,10 +41,6 @@ await vaultService.revokeKey(keyId);
 
 // Delete a key and clean up its model availability records
 await vaultService.deleteKey(keyId);
-
-// Export/import encrypted vault records as JSON
-const json = await vaultService.exportVault();
-const result = await vaultService.importVault(json);
 ```
 
 ## Key Files
@@ -68,3 +64,7 @@ const result = await vaultService.importVault(json);
 - **Revocation**: Revoked keys are immediately excluded from all routing
 - **Deletion cleanup**: `deleteKey()` removes the key from IndexedDB and calls `availabilityManager.deleteKeyModels(keyId)` to remove orphaned model availability records.
 - **Usage statistics**: Successful requests increment `usageCount` and update `averageLatency` using an 80% previous / 20% latest rolling average.
+
+## Known Limitation
+
+The MVP stores the exported master key JWK in `localStorage`. This keeps encrypted vault records usable across reloads, but it is not equivalent to passphrase-based key protection and is not suitable as-is for production threat models that include XSS or local browser storage compromise.

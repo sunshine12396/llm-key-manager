@@ -19,8 +19,6 @@ import {
 import { ModelStateMachine } from "./state-machine";
 import {
   calculateRetry,
-  calculateQuotaRetry,
-  type RetryDecision,
 } from "./retry-strategy";
 import { safetyGuard } from "../safety";
 import { availabilityCache } from "./availability.cache";
@@ -71,14 +69,6 @@ const MODEL_PRIORITY_PATTERNS: Array<{
 // TYPES
 // ============================================
 
-export interface RotationEvent {
-  type: "key_rotated_out" | "key_promoted" | "key_restored";
-  keyId: string;
-  providerId: AIProviderId;
-  reason?: "rate_limited" | "error" | "manual";
-  retryAfterMs?: number;
-}
-
 export interface ModelFilter {
   provider?: string;
   capabilities?: ModelCapability[];
@@ -90,26 +80,7 @@ export interface ModelFilter {
 // ============================================
 
 export class KeyModelAvailabilityManager {
-  private activeKeyMap: Map<AIProviderId, string> = new Map();
-  private rotationListeners: Array<(event: RotationEvent) => void> = [];
   private updateListeners: Array<() => void> = [];
-  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-  constructor() {
-    this.refreshActiveKeys();
-  }
-
-  /**
-   * Subscribe to rotation events for UI
-   */
-  onRotation(listener: (event: RotationEvent) => void): () => void {
-    this.rotationListeners.push(listener);
-    return () => {
-      this.rotationListeners = this.rotationListeners.filter(
-        (l) => l !== listener,
-      );
-    };
-  }
 
   /**
    * Subscribe to general status updates
@@ -125,50 +96,6 @@ export class KeyModelAvailabilityManager {
     this.updateListeners.forEach((l) => l());
   }
 
-  private emitRotation(event: RotationEvent): void {
-    this.rotationListeners.forEach((l) => l(event));
-  }
-
-  /**
-   * Get the currently promoted (best) key for a provider
-   */
-  getPromotedKey(providerId: AIProviderId): string | null {
-    return this.activeKeyMap.get(providerId) || null;
-  }
-
-  /**
-   * Refresh the active key map based on current availability.
-   * Called internally or when state changes.
-   */
-  async refreshActiveKeys(): Promise<void> {
-    if (this.refreshTimer) return;
-
-    this.refreshTimer = setTimeout(async () => {
-      const providers: AIProviderId[] = ["openai", "anthropic", "gemini"];
-      for (const p of providers) {
-        const best = await this.getBestAvailableModel(p);
-        if (best) {
-          const current = this.activeKeyMap.get(p);
-          if (current !== best.keyId) {
-            this.activeKeyMap.set(p, best.keyId);
-            this.emitRotation({
-              type: "key_promoted",
-              keyId: best.keyId,
-              providerId: p,
-            });
-          }
-        } else {
-          if (this.activeKeyMap.has(p)) {
-            this.activeKeyMap.delete(p);
-            this.emitUpdate();
-          }
-        }
-      }
-      this.emitUpdate();
-      this.refreshTimer = null;
-    }, 50);
-  }
-
   /**
    * Get model priority based on model ID patterns.
    */
@@ -179,29 +106,6 @@ export class KeyModelAvailabilityManager {
       }
     }
     return 1; // Default lowest priority
-  }
-
-  /**
-   * Calculate smart retry using error-aware strategy.
-   * Returns retry decision with timing, reason, and suggested next state.
-   */
-  calculateSmartRetry(
-    errorCode: number | undefined,
-    errorMessage: string | undefined,
-    retryCount: number,
-    modelPriority: ModelPriority = 3,
-  ): RetryDecision {
-    return calculateRetry(errorCode, errorMessage, retryCount, modelPriority);
-  }
-
-  /**
-   * Calculate retry for quota exhaustion with optional provider reset time.
-   */
-  calculateQuotaRetry(
-    quotaResetAt?: number,
-    modelPriority: ModelPriority = 3,
-  ): RetryDecision {
-    return calculateQuotaRetry(quotaResetAt, modelPriority);
   }
 
   /**
@@ -417,19 +321,6 @@ export class KeyModelAvailabilityManager {
   }
 
   /**
-   * Get all available models for a specific key.
-   */
-  async getAvailableModelsForKey(
-    keyId: string,
-  ): Promise<VerifiedModelMetadata[]> {
-    return db.modelCache
-      .where("keyId")
-      .equals(keyId)
-      .and((m: VerifiedModelMetadata) => ModelStateMachine.isUsable(m.state))
-      .toArray();
-  }
-
-  /**
    * Get all available models for a provider (across all keys)
    */
   async getAvailableModels(
@@ -462,7 +353,7 @@ export class KeyModelAvailabilityManager {
     if (errorCode === 429) {
       console.warn(`[Availability] Rate limit detected for ${keyId}. marking ALL models as COOLDOWN.`);
 
-      const retryDecision = this.calculateSmartRetry(
+      const retryDecision = calculateRetry(
         429,
         errorMessage,
         existing?.retryCount || 0,
@@ -501,7 +392,7 @@ export class KeyModelAvailabilityManager {
     safetyGuard.recordProviderFailure(existing.providerId);
 
     // Use smart retry strategy based on error type
-    const retryDecision = this.calculateSmartRetry(
+    const retryDecision = calculateRetry(
       errorCode,
       errorMessage,
       existing.retryCount,
@@ -545,32 +436,8 @@ export class KeyModelAvailabilityManager {
       `[Availability] ${modelId} -> ${newState} | ${retryDecision.reason}`,
     );
 
-    await this.refreshActiveKeys();
+    this.emitUpdate();
     return newState;
-  }
-
-  /**
-   * Handle quota exhaustion for a key.
-   * Marks all models for this key as in COOLDOWN state.
-   */
-  async handleQuotaExhausted(keyId: string, resetAt?: number): Promise<void> {
-    const models = await db.modelCache.where("keyId").equals(keyId).toArray();
-
-    const updates = models.map((m) => ({
-      ...m,
-      isAvailable: false,
-      state: "COOLDOWN" as ModelState,
-      quotaRemaining: 0,
-      quotaResetAt: resetAt,
-      nextRetryAt: resetAt || Date.now() + 60 * 60 * 1000, // Default 1 hour
-      lastCheckedAt: Date.now(),
-    }));
-
-    await db.modelCache.bulkPut(updates);
-    console.log(
-      `[Availability] Marked ${models.length} models as quota exhausted (COOLDOWN) for key ${keyId}`,
-    );
-    await this.refreshActiveKeys();
   }
 
   /**
@@ -598,7 +465,7 @@ export class KeyModelAvailabilityManager {
     if (existing) {
       availabilityCache.markUsable(keyId, modelId, existing.providerId, existing.modelPriority);
     }
-    await this.refreshActiveKeys();
+    this.emitUpdate();
   }
 
   // ============================================
@@ -653,17 +520,7 @@ export class KeyModelAvailabilityManager {
   ): Promise<void> {
     await db.modelCache.bulkPut(metadataList);
     availabilityCache.requestSync();
-    await this.refreshActiveKeys();
-  }
-
-  /**
-   * Get models that need re-verification (older than maxAge)
-   */
-  async getStaleModels(
-    maxAgeMs: number = 24 * 60 * 60 * 1000,
-  ): Promise<VerifiedModelMetadata[]> {
-    const cutoff = Date.now() - maxAgeMs;
-    return db.modelCache.where("lastCheckedAt").below(cutoff).toArray();
+    this.emitUpdate();
   }
 
   /**
@@ -703,36 +560,6 @@ export class KeyModelAvailabilityManager {
   async clearCache(): Promise<void> {
     await db.modelCache.clear();
     availabilityCache.clear();
-  }
-
-  /**
-   * Update model availability based on error code
-   * - 401/403: Mark unavailable (auth issue)
-   * - 429: Keep available (temporary rate limit)
-   * - 404: Mark unavailable (model not found)
-   * - 500+: Keep available (server issue, temporary)
-   */
-  async handleModelError(
-    keyId: string,
-    modelId: string,
-    errorCode: number,
-    errorMessage: string,
-  ): Promise<"unavailable" | "temporary" | "unknown"> {
-    // Permanent failures - mark as unavailable
-    if (errorCode === 401 || errorCode === 403 || errorCode === 404) {
-      await this.handleRuntimeError(keyId, modelId, errorCode, errorMessage);
-      return "unavailable";
-    }
-
-    // Temporary failures - don't change status at DB level (handled by retry strategy)
-    if (errorCode === 429 || errorCode >= 500) {
-      console.log(
-        `[Availability] Temporary error ${errorCode} for ${modelId}, keeping status`,
-      );
-      return "temporary";
-    }
-
-    return "unknown";
   }
 
   /**

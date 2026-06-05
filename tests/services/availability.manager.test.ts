@@ -38,6 +38,7 @@ vi.mock("../../src/services/availability/availability.cache", () => ({
         markUsable: vi.fn(),
         markUnusable: vi.fn(),
         initializeKey: vi.fn(),
+        requestSync: vi.fn(),
     },
 }));
 
@@ -144,18 +145,4 @@ describe("AvailabilityManager", () => {
         });
     });
 
-    describe("handleQuotaExhausted", () => {
-        it("should mark all models for a key as COOLDOWN", async () => {
-            const keyId = "key1";
-            vi.mocked(db.modelCache.where as any).mockReturnThis();
-            vi.mocked(db.modelCache.toArray as any).mockResolvedValue([
-                { keyId, modelId: "m1", providerId: "p1" },
-                { keyId, modelId: "m2", providerId: "p1" }
-            ]);
-
-            await availabilityManager.handleQuotaExhausted(keyId, 3600);
-
-            expect(db.modelCache.bulkPut as any).toHaveBeenCalled();
-        });
-    });
 });

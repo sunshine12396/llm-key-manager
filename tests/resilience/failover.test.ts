@@ -41,6 +41,11 @@ vi.mock("../../src/services/safety", () => ({
 }));
 vi.mock("../../src/services/policies/quota.policy");
 vi.mock("../../src/services/policies/retry.policy");
+vi.mock("../../src/services/analytics.service", () => ({
+  analyticsService: {
+    recordError: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 describe("Resilience Engine - Failover & Routing", () => {
   const mockKeys: KeyMetadata[] = [
@@ -127,6 +132,7 @@ describe("Resilience Engine - Failover & Routing", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -215,6 +221,95 @@ describe("Resilience Engine - Failover & Routing", () => {
     expect(result.success).toBe(false);
     // Last error is returned
     expect(result.error?.message).toBe("500 Server Error");
+  });
+
+  it("should stop key rotation after maxKeys=5 attempts", async () => {
+    const manyKeys: KeyMetadata[] = Array.from({ length: 6 }, (_, index) => ({
+      id: `k${index + 1}`,
+      providerId: "openai",
+      label: `Key ${index + 1}`,
+      priority: "medium",
+      createdAt: Date.now(),
+      usageCount: 0,
+      isRevoked: false,
+      isEnabled: true,
+    }));
+
+    vi.mocked(keyResolver.resolve).mockImplementation(
+      async (_modelId, options) => {
+        const excluded = options?.excludeKeyIds || [];
+        const nextKey = manyKeys.find((key) => !excluded.includes(key.id));
+        return nextKey ? createResolvedKey(nextKey) : null;
+      },
+    );
+
+    const mockFn = vi.fn().mockRejectedValue(new Error("500 Server Error"));
+
+    const result = await resilientHandler.executeRequest("openai", mockFn);
+
+    expect(result.success).toBe(false);
+    expect(result.attempts).toBe(5);
+    expect(mockFn).toHaveBeenCalledTimes(5);
+    expect(keyResolver.resolve).toHaveBeenCalledTimes(5);
+    expect(mockFn).not.toHaveBeenCalledWith("sk-k6", manyKeys[5]);
+  });
+
+  it("should timeout a slow request and rotate to the next key", async () => {
+    const mockFn = vi
+      .fn()
+      .mockReturnValueOnce(new Promise(() => undefined))
+      .mockResolvedValueOnce({ success: true, data: "recovered" });
+
+    const result = await resilientHandler.executeRequest("openai", mockFn, {
+      timeout: 1,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.keyUsed).toBe("k2");
+    expect(mockFn).toHaveBeenCalledTimes(2);
+    expect(keyResolver.markFailure).toHaveBeenCalledWith("k1", "gpt-4");
+  });
+
+  it("should record provider failure for 500 server errors", async () => {
+    const mockFn = vi.fn().mockRejectedValueOnce(new Error("500 Server Error"));
+    vi.mocked(keyResolver.resolve)
+      .mockResolvedValueOnce(createResolvedKey(mockKeys[0]))
+      .mockResolvedValueOnce(null);
+
+    const result = await resilientHandler.executeRequest("openai", mockFn);
+
+    expect(result.success).toBe(false);
+    expect(safetyGuard.recordKeyFailure).toHaveBeenCalledWith("k1", "openai");
+    expect(safetyGuard.recordProviderFailure).toHaveBeenCalledWith("openai");
+  });
+
+  it("should not record provider failure for 429 rate limits", async () => {
+    const mockFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("429 Too Many Requests"));
+    vi.mocked(keyResolver.resolve)
+      .mockResolvedValueOnce(createResolvedKey(mockKeys[0]))
+      .mockResolvedValueOnce(null);
+
+    const result = await resilientHandler.executeRequest("openai", mockFn);
+
+    expect(result.success).toBe(false);
+    expect(safetyGuard.recordKeyFailure).toHaveBeenCalledWith("k1", "openai");
+    expect(safetyGuard.recordProviderFailure).not.toHaveBeenCalled();
+  });
+
+  it("should not record provider failure for 401 auth errors", async () => {
+    const mockFn = vi.fn().mockRejectedValueOnce(new Error("401 Unauthorized"));
+    vi.mocked(keyResolver.resolve)
+      .mockResolvedValueOnce(createResolvedKey(mockKeys[0]))
+      .mockResolvedValueOnce(null);
+
+    const result = await resilientHandler.executeRequest("openai", mockFn);
+
+    expect(result.success).toBe(false);
+    expect(vaultService.revokeKey).toHaveBeenCalledWith("k1");
+    expect(safetyGuard.recordKeyFailure).toHaveBeenCalledWith("k1", "openai");
+    expect(safetyGuard.recordProviderFailure).not.toHaveBeenCalled();
   });
 
   it("should mark success in keyResolver on successful request", async () => {

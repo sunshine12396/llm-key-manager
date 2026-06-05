@@ -3,7 +3,6 @@ import { createAnthropicClient } from "../client";
 import {
   extractErrorCode,
   createTypedError,
-  RateLimitError,
 } from "../../../core/errors";
 
 /**
@@ -19,10 +18,6 @@ export function parseAnthropicError(error: any, modelId: string): Error {
   const retryAfterMs = retryAfterHeader
     ? parseInt(retryAfterHeader) * 1000
     : undefined;
-
-  if (status === 429 && retryAfterMs) {
-    return new RateLimitError(formattedMessage, "anthropic", retryAfterMs);
-  }
 
   const errorCode = extractErrorCode(message) ?? status;
   return createTypedError(formattedMessage, errorCode, "anthropic", {

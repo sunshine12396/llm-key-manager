@@ -143,69 +143,6 @@ export class VaultService {
         });
     }
 
-    /**
-     * Exports the entire vault as an encrypted JSON blob.
-     * Note: The keys remain encrypted with the master key.
-     */
-    async exportVault(): Promise<string> {
-        const { bufferToBase64 } = await import('../../utils/binary');
-        const records = await db.keys.toArray();
-
-        // Convert buffers to base64 for JSON serialization
-        const serializedKeys = records.map(key => ({
-            ...key,
-            encryptedData: bufferToBase64(key.encryptedData),
-            iv: bufferToBase64(key.iv)
-        }));
-
-        const exportData = {
-            version: '1.0',
-            exportedAt: Date.now(),
-            keys: serializedKeys
-        };
-        return JSON.stringify(exportData, null, 2);
-    }
-
-    /**
-     * Imports keys from a vault export.
-     * Merges with existing keys by ID.
-     */
-    async importVault(jsonString: string): Promise<{ added: number, updated: number }> {
-        const { base64ToBuffer } = await import('../../utils/binary');
-        try {
-            const data = JSON.parse(jsonString);
-            if (!data.keys || !Array.isArray(data.keys)) {
-                throw new Error('Invalid vault export format');
-            }
-
-            let added = 0;
-            let updated = 0;
-
-            for (const keyData of data.keys) {
-                // Restore buffers from base64
-                const key = {
-                    ...keyData,
-                    encryptedData: base64ToBuffer(keyData.encryptedData),
-                    iv: base64ToBuffer(keyData.iv)
-                };
-
-                const existing = await db.keys.get(key.id);
-                if (existing) {
-                    await db.keys.update(key.id, key);
-                    updated++;
-                } else {
-                    await db.keys.add(key);
-                    added++;
-                }
-            }
-
-            return { added, updated };
-        } catch (e) {
-            console.error('Vault import failed', e);
-            throw new Error('Failed to import vault: ' + (e instanceof Error ? e.message : 'Unknown error'));
-        }
-    }
-
     async revokeKey(id: string): Promise<void> {
         await db.keys.update(id, { isRevoked: true });
     }

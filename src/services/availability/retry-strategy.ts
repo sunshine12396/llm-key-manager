@@ -361,15 +361,3 @@ export function getStrategySummary(category: ErrorCategory): string {
   }
   return `${category}: ${strategy.maxRetries} retries, ${formatDelay(strategy.baseDelayMs)} base, ${formatDelay(strategy.maxDelayMs)} max`;
 }
-
-/**
- * Get all strategy summaries for documentation/debugging.
- */
-export function getAllStrategySummaries(): Record<ErrorCategory, string> {
-  return Object.fromEntries(
-    (Object.keys(RETRY_STRATEGIES) as ErrorCategory[]).map((cat) => [
-      cat,
-      getStrategySummary(cat),
-    ]),
-  ) as Record<ErrorCategory, string>;
-}

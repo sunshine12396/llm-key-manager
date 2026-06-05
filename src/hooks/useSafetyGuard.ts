@@ -10,7 +10,7 @@ import {
     safetyGuard, 
     type SafetyStatus, 
     type SafetyEvent
-} from '../services/availability';
+} from '../services/safety';
 import type { AIProviderId } from '../models/types';
 
 export interface UseSafetyGuardReturn {

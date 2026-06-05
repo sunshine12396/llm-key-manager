@@ -54,6 +54,8 @@ interface PersistedState {
   scanningFrozen: boolean;
   emergencyMode: boolean;
   disabledKeys: string[];
+  forcedFallbackModel?: string | null;
+  forcedFallbackProvider?: AIProviderId | null;
   keyCircuitBreakers: Array<[string, CircuitBreakerState]>;
   providerCircuitBreakers: Array<[AIProviderId, CircuitBreakerState]>;
 }
@@ -98,6 +100,10 @@ class SafetyGuard {
         this.state.emergencyMode = data.emergencyMode;
       if (data.disabledKeys)
         this.state.disabledKeys = new Set(data.disabledKeys);
+      if (data.forcedFallbackModel !== undefined)
+        this.state.forcedFallbackModel = data.forcedFallbackModel;
+      if (data.forcedFallbackProvider !== undefined)
+        this.state.forcedFallbackProvider = data.forcedFallbackProvider;
 
       if (Array.isArray(data.keyCircuitBreakers)) {
         this.breaker.restoreKeyCircuits(data.keyCircuitBreakers);
@@ -120,6 +126,8 @@ class SafetyGuard {
         scanningFrozen: this.state.scanningFrozen,
         emergencyMode: this.state.emergencyMode,
         disabledKeys: Array.from(this.state.disabledKeys),
+        forcedFallbackModel: this.state.forcedFallbackModel,
+        forcedFallbackProvider: this.state.forcedFallbackProvider,
         keyCircuitBreakers: this.breaker.getKeyCircuitsSnapshot(),
         providerCircuitBreakers: this.breaker.getProviderCircuitsSnapshot(),
       };

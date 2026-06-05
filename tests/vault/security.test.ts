@@ -31,13 +31,12 @@ describe('Vault Security Verification', () => {
     let vault: VaultService;
 
     beforeEach(async () => {
+        vi.restoreAllMocks();
+        localStorage.clear();
         // Reset DB before each test
         await db.delete();
         await db.open();
         vault = new VaultService();
-        // Reset local storage mock if used
-        vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
-        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { });
     });
 
     it('should encrypt api key before storage', async () => {
@@ -72,6 +71,23 @@ describe('Vault Security Verification', () => {
         const retrievedKey = await vault.getKey(keyId);
 
         expect(retrievedKey).toBe(originalKey);
+    });
+
+    it('should reuse persisted master key across vault instances', async () => {
+        await vault.unlock();
+
+        const originalKey = 'sk-persisted-secret-key';
+        const keyId = await vault.addKey('openai', originalKey, 'Persisted Key');
+        const persistedMasterKey = localStorage.getItem('ai_vault_master_key');
+
+        expect(persistedMasterKey).toBeTruthy();
+
+        // Simulate a page reload: new service instance, same IndexedDB and localStorage.
+        const reloadedVault = new VaultService();
+        await reloadedVault.unlock();
+
+        await expect(reloadedVault.getKey(keyId)).resolves.toBe(originalKey);
+        expect(localStorage.getItem('ai_vault_master_key')).toBe(persistedMasterKey);
     });
 
     it('should prevent access if vault is locked', async () => {

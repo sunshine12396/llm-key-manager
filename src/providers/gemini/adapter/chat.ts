@@ -3,7 +3,6 @@ import { createGeminiClient } from "../client";
 import {
   extractErrorCode,
   createTypedError,
-  RateLimitError,
 } from "../../../core/errors";
 
 /**
@@ -44,10 +43,6 @@ export function parseGeminiError(error: any, modelId: string): Error {
 
   const errorCode = extractErrorCode(message);
   const formattedMessage = `Gemini API Error ${errorCode || "Unknown"}: ${message}`;
-
-  if (errorCode === 429 && retryAfterMs) {
-    return new RateLimitError(formattedMessage, "gemini", retryAfterMs);
-  }
 
   return createTypedError(formattedMessage, errorCode, "gemini", {
     modelId,

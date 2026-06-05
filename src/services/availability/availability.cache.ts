@@ -240,10 +240,7 @@ class AvailabilityCache {
    * Get all usable key-model pairs for a specific model ID
    * ACHIEVES O(1) via pre-sorted map lookup
    */
-  getUsableKeysForModel(
-    providerId: AIProviderId,
-    modelId: string,
-  ): CachedModelState[] {
+  getUsableKeysForModel(modelId: string): CachedModelState[] {
     return this.sortedByModel.get(modelId) || [];
   }
 

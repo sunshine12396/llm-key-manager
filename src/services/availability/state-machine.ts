@@ -258,35 +258,3 @@ export class ModelStateMachine {
         }
     }
 }
-
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-
-/**
- * Map old status strings to new ModelState.
- * Used for migration/compatibility.
- */
-export function migrateOldStatus(oldStatus: string): ModelState {
-    switch (oldStatus) {
-        case 'available': return 'AVAILABLE';
-        case 'temporary_failed': return 'TEMP_FAILED';
-        case 'permanently_failed': return 'PERM_FAILED';
-        case 'unknown': return 'NEW';
-        default: return 'NEW';
-    }
-}
-
-/**
- * Map new ModelState to display-friendly status.
- */
-export function toDisplayStatus(state: ModelState): string {
-    switch (state) {
-        case 'NEW': return 'new';
-        case 'CHECKING': return 'checking';
-        case 'AVAILABLE': return 'available';
-        case 'TEMP_FAILED': return 'temp_failed';
-        case 'COOLDOWN': return 'cooldown';
-        case 'PERM_FAILED': return 'perm_failed';
-    }
-}

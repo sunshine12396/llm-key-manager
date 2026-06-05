@@ -106,7 +106,7 @@ describe('Smart Health & Capability Discovery', () => {
         expect(geminiModels[0].modelId).toBe('gemini-pro');
     });
 
-    it('should handle model error states correctly (Smart Health)', async () => {
+    it('should handle runtime model error states correctly', async () => {
         const keyId = 'key-test';
         const modelId = 'gpt-test';
 
@@ -138,7 +138,7 @@ describe('Smart Health & Capability Discovery', () => {
         });
 
         // Simulating 401 (Auth Error) -> Should mark unavailable
-        await availabilityManager.handleModelError(keyId, modelId, 401, 'Unauthorized');
+        await availabilityManager.handleRuntimeError(keyId, modelId, 401, 'Unauthorized');
         let meta = await availabilityManager.getModelMetadata(keyId, modelId);
         expect(meta?.isAvailable).toBe(false);
         expect(meta?.state).toBe('PERM_FAILED');
@@ -146,23 +146,10 @@ describe('Smart Health & Capability Discovery', () => {
         // Reset
         await availabilityManager.markModelAvailable(keyId, modelId);
 
-        // Simulating 429 (Rate Limit) -> Should REMAIN available (handled by router, not permanent disable)
-        await availabilityManager.handleModelError(keyId, modelId, 429, 'Rate Limit');
+        // Simulating 429 (Rate Limit) -> Should cooldown all models for the key
+        await availabilityManager.handleRuntimeError(keyId, modelId, 429, 'Rate Limit');
         meta = await availabilityManager.getModelMetadata(keyId, modelId);
-        expect(meta?.isAvailable).toBe(true);
-    });
-
-    it('should retrieve stale models for background validation', async () => {
-        const now = Date.now();
-        const oldTime = now - (25 * 60 * 60 * 1000); // 25 hours ago
-
-        await availabilityManager.saveModelMetadataBatch([
-            { modelId: 'fresh', keyId: 'k1', providerId: 'openai', isAvailable: true, lastCheckedAt: now, state: 'AVAILABLE', modelPriority: 1, retryCount: 0, nextRetryAt: null },
-            { modelId: 'stale', keyId: 'k1', providerId: 'openai', isAvailable: true, lastCheckedAt: oldTime, state: 'AVAILABLE', modelPriority: 1, retryCount: 0, nextRetryAt: null }
-        ]);
-
-        const stale = await availabilityManager.getStaleModels(24 * 60 * 60 * 1000);
-        expect(stale.length).toBe(1);
-        expect(stale[0].modelId).toBe('stale');
+        expect(meta?.isAvailable).toBe(false);
+        expect(meta?.state).toBe('COOLDOWN');
     });
 });

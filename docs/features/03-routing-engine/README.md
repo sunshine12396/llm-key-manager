@@ -27,10 +27,13 @@ Effective Score = Power + Priority_Bonus + Health_Bonus - Latency_Penalty
 |:------|:------|
 | `o3` | 100 |
 | `gpt-4.5` | 90 |
-| `claude-3-5-sonnet` | 85 |
+| `claude-3-5-sonnet-latest` | 85 |
 | `gemini-2.5-pro` | 85 |
 | `gpt-4o` | 80 |
+| `gemini-1.5-pro` | 80 |
+| `gemini-2.5-flash` | 75 |
 | `gemini-2.0-flash` | 70 |
+| Other registered models | 50 |
 
 ## Architecture: Two-Layer Routing
 
@@ -38,7 +41,7 @@ Effective Score = Power + Priority_Bonus + Health_Bonus - Latency_Penalty
 Resolves an abstract alias into an ordered list of concrete models:
 
 ```typescript
-"smart" → ["gpt-4o", "claude-3-5-sonnet", "gemini-2.5-pro"]
+"smart" → ["gpt-4o", "claude-3-5-sonnet-latest", "gemini-2.5-pro"]
 "fast"  → ["gpt-4o-mini", "gemini-2.0-flash", "claude-3-haiku"]
 ```
 
@@ -55,21 +58,32 @@ For each model in the chain, finds the best key:
 2. **Cache lookup**: `AvailabilityCache.getUsableModels(provider)` — O(1)
 3. **Model filter**: Match requested model (exact + substring)
 4. **Exclude filter**: Remove failed/attempted keys
-5. **Sticky preference**: If a previous key worked for this capability, try it first
+5. **Sticky preference**: If `ResolveOptions.preferredKeyId` matches a safe key for the requested model, use it first
 6. **Score sort**: Descending `effectiveScore` with deterministic `keyId.localeCompare` tie-breaker
 7. **Return**: Highest-scoring key + decrypted API key
 
+Key resolution runs in strict mode. If a concrete model ID is requested and no usable key matches that model, `keyResolver.resolve()` returns `null`; it does not silently choose a different model from the same provider. Trying the next fallback model belongs to Layer 1 (`UnifiedLLMClient`'s model-chain loop), which keeps model fallback behavior explicit and ordered.
+
+```typescript
+await keyResolver.resolve("gpt-4o", {
+  providerId: "openai",
+  preferredKeyId: sticky?.keyId,
+  excludeKeyIds: attemptedKeys,
+});
+```
+
 ## Sticky Routing
 
-Once a successful `(model, key)` pair is found for a capability alias, it's cached in-memory for the session:
+`UnifiedLLMClient` owns session stickiness. Once a successful `(model, provider, key)` tuple is found for a capability alias or requested model, the client stores it in memory:
 
 ```typescript
 stickyModels: Map<string, { modelId, providerId, keyId }>
 ```
 
-- Sticky model is always tried **first** in the chain (promoted to index 0)
-- Cleared automatically when the sticky key fails
-- Disabled when `providerId` is explicitly forced
+- The sticky model is promoted to the front of the model chain when `providerId` is not explicitly forced
+- The sticky key is passed to `keyResolver.resolve()` as `ResolveOptions.preferredKeyId`
+- `KeyResolver` only uses the sticky key if that key is present in the matching model set and passes safety checks
+- If the sticky key fails during a request, the client excludes that key for the current model attempt; permanent key failures are excluded for the rest of the request
 
 ## AvailabilityCache Design
 
@@ -83,7 +97,7 @@ The cache maintains **4 indices** for O(1) lookups:
 | `modelsByKey` | `keyId` | `Set<cacheKey>` | Key deletion |
 
 - Syncs from IndexedDB on initialization
-- TTL: 5 minutes (triggers re-sync if stale)
+- TTL: 5 minutes via `isStale()`, but the current routing hot path does not call `isStale()` to trigger automatic re-sync. Synchronization is event-driven through `requestSync()` / `syncFromDB()`, with one fallback sync when the provider cache is empty.
 - Re-sorts on every state change for consistent results
 
 ## Key Files

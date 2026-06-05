@@ -22,10 +22,3 @@ export function getCandidateModels(providerId: AIProviderId): string[] {
     // Extract model IDs from the provider's model config
     return Object.keys(providerModels);
 }
-
-/**
- * Get all known providers.
- */
-export function getKnownProviders(): AIProviderId[] {
-    return ['openai', 'anthropic', 'gemini'];
-}
