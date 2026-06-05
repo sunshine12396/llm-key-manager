@@ -248,4 +248,4 @@ After completing the above tasks, clean the barrel export to only export symbols
 3. **Then Phase X** (cross-cutting, depends on Phase 3)
 4. **Then Phase 1, 2, 6** (small, isolated changes)
 5. **Phase 5 last** (just comments, no code change)
-6. **Run `npm run build` after each phase** to verify no regressions
+6. **Run `pnpm run build` after each phase** to verify no regressions

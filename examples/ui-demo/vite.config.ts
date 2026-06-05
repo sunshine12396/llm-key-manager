@@ -14,4 +14,10 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['llm-key-manager'],
   },
+  server: {
+    watch: {
+      usePolling: true,
+      ignored: ['**/node_modules/**', '**/.git/**'],
+    },
+  },
 });

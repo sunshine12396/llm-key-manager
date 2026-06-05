@@ -36,7 +36,9 @@ export const KeyRow: React.FC<KeyRowProps> = ({
   onToggleActive,
 }) => {
   const isActive = keyData.isEnabled !== false;
-  const isPrimary = availabilityManager.getPromotedKey(keyData.providerId) === keyData.id;
+  const isPrimary = React.useMemo(() => {
+    return availabilityManager.getPromotedKey(keyData.providerId) === keyData.id;
+  }, [keyData.providerId, keyData.id]);
   const { validationEvents } = useLLMKeyManager();
   const validationEvent = validationEvents.find(
     (e: any) => e.keyId === keyData.id,

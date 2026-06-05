@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Badge } from "../../ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "llm-key-manager/utils/cn";
-import { filterModelsByCapability } from "llm-key-manager/services/model-capabilities";
+import { getModelCapabilities } from "llm-key-manager/services/model-capabilities";
 import { ModelCard } from "./ModelCard";
 import type {
   KeyMetadata,
@@ -40,7 +40,9 @@ export const KeyRowModelList: React.FC<KeyRowModelListProps> = ({
   const filteredModels =
     capabilityFilter === "all"
       ? allModelIds
-      : filterModelsByCapability(allModelIds, capabilityFilter);
+      : allModelIds.filter((modelId) =>
+        getModelCapabilities(modelId).includes(capabilityFilter)
+      );
 
   return (
     <div
@@ -122,10 +124,10 @@ export const KeyRowStatusButton: React.FC<KeyRowStatusButtonProps> = ({
         onToggleExpand();
       }}
       className={cn(
-        "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.1em] border transition-all duration-300 cursor-pointer shadow-sm",
+        "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all duration-300 cursor-pointer shadow-sm",
         isExpanded
-          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] translate-y-[-1px]"
-          : "bg-emerald-500/10 text-emerald-400/90 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 hover:translate-y-[-1px]",
+          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] -translate-y-px"
+          : "bg-emerald-500/10 text-emerald-400/90 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 hover:-translate-y-px",
       )}
       aria-expanded={isExpanded}
       aria-controls={`models-${keyId}`}

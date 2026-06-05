@@ -1,183 +1,347 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
+  Activity,
+  BarChart3,
   Key,
-  Zap,
-  ShieldCheck,
-  Cpu,
   RefreshCw,
+  Send,
+  ShieldCheck,
+  Sparkles,
   Terminal,
-  Send
-} from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+} from "lucide-react";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
-// Library Imports (via alias)
-import { llmClient, useLLMKeyManager } from 'llm-key-manager';
+import { llmClient, useLLMKeyManager, useSafetyGuard } from "llm-key-manager";
 
-import { useConfirm } from './components/ui';
-import { KeyListDashboard } from './components/dashboard/KeyListDashboard';
+import {
+  DeveloperPlayground,
+  KeyListDashboard,
+  ValidationNotificationToast,
+} from "./components";
 
-/** Tailwind Utility */
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export default function App() {
-  const { } = useLLMKeyManager();
-  const [prompt, setPrompt] = useState('');
-  const [messages, setMessages] = useState<any[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const [activeTab, setActiveTab] = useState<'vault' | 'chat'>('vault');
-  const { ConfirmDialog } = useConfirm();
+type TabId = "testing-ground" | "vault" | "chat";
 
-  // Most state is now managed by KeyListDashboard when in vault tab
-  // Chat Handlers
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  isError?: boolean;
+};
+
+export default function App() {
+  const { keys } = useLLMKeyManager();
+  const { status, lastEvent } = useSafetyGuard();
+  const [activeTab, setActiveTab] = useState<TabId>("testing-ground");
+  const [prompt, setPrompt] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isSending, setIsSending] = useState(false);
+
+  const disabledProviders = status?.disabledProviders.length ?? 0;
+  const disabledKeys = status?.disabledKeys.length ?? 0;
+  const fallback = status?.forcedFallback ?? null;
 
   const handleSendChat = async () => {
-    if (!prompt.trim()) return;
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
 
-    const userMsg = { role: 'user', content: prompt };
-    setMessages(prev => [...prev, userMsg]);
-    setPrompt('');
+    const userMsg: ChatMessage = { role: "user", content: trimmed };
+    setMessages((prev) => [...prev, userMsg]);
+    setPrompt("");
     setIsSending(true);
 
     try {
       const response = await llmClient.chat({
-        model: "smart", // Use alias
-        messages: [...messages, userMsg]
+        model: "smart",
+        messages: [...messages, userMsg].map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
       });
 
-      setMessages(prev => [...prev, { role: 'assistant', content: response.content }]);
-    } catch (err: any) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}`, isError: true }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: response.content },
+      ]);
+    } catch (error: any) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `Error: ${error?.message || "Unable to complete request"}`,
+          isError: true,
+        },
+      ]);
     } finally {
       setIsSending(false);
     }
   };
 
   return (
-    <div className="min-h-screen p-6 md:p-12 max-w-7xl mx-auto">
-      {/* Header */}
-      <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-4xl font-outfit font-bold gradient-text mb-2 flex items-center gap-3">
-            <ShieldCheck className="text-accent-blue" size={40} />
-            LLM Key Manager
-          </h1>
-          <p className="text-gray-400 max-w-lg">
-            Production-grade multi-provider LLM failover, security, and usage management demo.
-          </p>
-        </div>
-
-        <nav className="flex bg-card p-1 rounded-xl border border-white/5 self-start">
-          <button
-            onClick={() => setActiveTab('vault')}
-            className={cn(
-              "px-6 py-2 rounded-lg transition-all flex items-center gap-2 font-medium",
-              activeTab === 'vault' ? "bg-accent-blue text-white shadow-lg" : "text-gray-400 hover:text-white"
-            )}
-          >
-            <Key size={18} /> Vault
-          </button>
-          <button
-            onClick={() => setActiveTab('chat')}
-            className={cn(
-              "px-6 py-2 rounded-lg transition-all flex items-center gap-2 font-medium",
-              activeTab === 'chat' ? "bg-accent-blue text-white shadow-lg" : "text-gray-400 hover:text-white"
-            )}
-          >
-            <Terminal size={18} /> Demo
-          </button>
-        </nav>
-      </header>
-
-      {activeTab === 'vault' ? (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <KeyListDashboard />
-        </div>
-      ) : (
-        <div className="h-[600px] glass rounded-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-500">
-          <div className="bg-white/5 p-4 border-b border-white/5 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-6 md:py-8">
+        <header className="flex flex-col gap-5 border-b border-slate-800/80 pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-red-500/40" />
-              <div className="w-3 h-3 rounded-full bg-yellow-500/40" />
-              <div className="w-3 h-3 rounded-full bg-green-500/40" />
-              <span className="text-xs font-mono text-gray-500 ml-4">unified-llm-session v1.0</span>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 shadow-lg shadow-black/20">
+                <ShieldCheck className="h-6 w-6 text-indigo-400" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-slate-50 md:text-4xl">
+                  LLM Key Manager
+                </h1>
+                <p className="mt-1 max-w-2xl text-sm text-slate-400">
+                  A local-first control surface for vault, routing, resilience,
+                  analytics, and safety.
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-gray-400 bg-black/40 px-3 py-1.5 rounded-full">
-              <Cpu size={14} className="text-accent-blue" />
-              Auto-Failover Mode Active
-            </div>
-          </div>
 
-          <div className="flex-1 overflow-y-auto p-8 space-y-6">
-            {messages.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
-                <Terminal size={48} className="mb-4 text-accent-blue" />
-                <h3 className="text-xl font-outfit font-medium">Model Demo</h3>
-                <p className="max-w-xs text-sm">Send a prompt and the manager will select the best available key from your vault.</p>
-              </div>
-            )}
-            {messages.map((msg, idx) => (
-              <div key={idx} className={cn(
-                "flex flex-col max-w-[80%]",
-                msg.role === 'user' ? "ml-auto items-end" : "mr-auto items-start"
-              )}>
-                <div className={cn(
-                  "p-4 rounded-2xl text-sm leading-relaxed",
-                  msg.role === 'user'
-                    ? "bg-accent-blue text-white rounded-tr-none"
-                    : msg.isError
-                      ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                      : "bg-white/5 text-gray-200 border border-white/5 rounded-tl-none"
-                )}>
-                  {msg.content}
-                </div>
-                <span className="text-[10px] text-gray-500 mt-1 uppercase font-bold tracking-widest">
-                  {msg.role}
-                </span>
-              </div>
-            ))}
-            {isSending && (
-              <div className="flex items-center gap-2 text-gray-400 text-xs animate-pulse">
-                <RefreshCw size={14} className="animate-spin" /> Resolving best model and key...
-              </div>
-            )}
-          </div>
-
-          <div className="p-6 bg-white/5 border-t border-white/5">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Ask anything... (using smart failover alias)"
-                className="w-full bg-black/60 border border-white/10 rounded-2xl px-6 py-4 pr-16 outline-none focus:border-accent-blue transition-all"
-                value={prompt}
-                onChange={e => setPrompt(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSendChat()}
-                disabled={isSending}
+            <div className="flex flex-wrap gap-2">
+              <BadgeChip icon={<Key className="h-3.5 w-3.5" />} label={`${keys.length} keys`} />
+              <BadgeChip
+                icon={<ShieldCheck className="h-3.5 w-3.5" />}
+                label={`${disabledProviders} providers off`}
+                tone={disabledProviders > 0 ? "warning" : "safe"}
               />
-              <button
-                onClick={handleSendChat}
-                disabled={isSending || !prompt.trim()}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-accent-blue text-white rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send size={20} />
-              </button>
-            </div>
-            <div className="flex gap-4 mt-4 px-2">
-              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 uppercase font-bold">
-                <ShieldCheck size={12} className="text-green-500" /> AES-256-GCM Vault
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 uppercase font-bold">
-                <Zap size={12} className="text-yellow-500" /> Multi-Provider
-              </div>
+              <BadgeChip
+                icon={<Activity className="h-3.5 w-3.5" />}
+                label={`${disabledKeys} keys off`}
+                tone={disabledKeys > 0 ? "warning" : "safe"}
+              />
+              <BadgeChip
+                icon={<Sparkles className="h-3.5 w-3.5" />}
+                label={
+                  fallback
+                    ? `${fallback.model}${fallback.provider ? ` · ${fallback.provider}` : ""}`
+                    : "no fallback override"
+                }
+                tone={fallback ? "info" : "neutral"}
+              />
+              <BadgeChip
+                icon={<RefreshCw className={cn("h-3.5 w-3.5", lastEvent && "animate-pulse")} />}
+                label={lastEvent ? lastEvent.type : "idle"}
+                tone={lastEvent ? "info" : "neutral"}
+              />
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Reusable Old Code Confirmation Dialog */}
-      <ConfirmDialog />
+          <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-800 bg-slate-900/90 p-1 shadow-lg shadow-black/20">
+            <TabButton
+              active={activeTab === "testing-ground"}
+              icon={<BarChart3 className="h-4 w-4" />}
+              label="Testing Ground"
+              onClick={() => setActiveTab("testing-ground")}
+            />
+            <TabButton
+              active={activeTab === "vault"}
+              icon={<Key className="h-4 w-4" />}
+              label="Vault"
+              onClick={() => setActiveTab("vault")}
+            />
+            <TabButton
+              active={activeTab === "chat"}
+              icon={<Terminal className="h-4 w-4" />}
+              label="Chat"
+              onClick={() => setActiveTab("chat")}
+            />
+          </nav>
+        </header>
+
+        <main className="flex-1 pb-8">
+          {activeTab === "testing-ground" && (
+            <DeveloperPlayground
+              onNavigate={(tab) => {
+                if (tab === "vault") setActiveTab("vault");
+                if (tab === "chat") setActiveTab("chat");
+                if (tab === "testing-ground") setActiveTab("testing-ground");
+              }}
+            />
+          )}
+
+          {activeTab === "vault" && <KeyListDashboard />}
+
+          {activeTab === "chat" && (
+            <section className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/30">
+              <div className="flex items-center justify-between border-b border-slate-800 bg-slate-800/50 px-4 py-3 md:px-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-3 w-3 rounded-full bg-red-500/40" />
+                  <div className="flex h-3 w-3 rounded-full bg-yellow-500/40" />
+                  <div className="flex h-3 w-3 rounded-full bg-green-500/40" />
+                  <span className="ml-3 text-xs font-mono text-slate-500">
+                    unified-llm-session
+                  </span>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-400">
+                  <BarChart3 className="h-3.5 w-3.5 text-indigo-400" />
+                  Auto failover enabled
+                </div>
+              </div>
+
+              <div className="space-y-6 p-5 md:p-8">
+                <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-800 bg-slate-950/30 px-6 py-14 text-center">
+                  <Terminal className="mb-4 h-12 w-12 text-indigo-400" />
+                  <h2 className="text-2xl font-semibold text-slate-100">
+                    Model Demo
+                  </h2>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
+                    Send a prompt and the client will route through the current
+                    safety, quota, and fallback rules before choosing a key.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 rounded-3xl border border-slate-800 bg-slate-950/40 p-4 md:flex-row md:items-center">
+                    <input
+                      type="text"
+                      placeholder="Ask anything... (using the smart failover alias)"
+                      className="h-12 flex-1 rounded-2xl border border-slate-800 bg-slate-900 px-5 text-sm text-slate-100 outline-none transition focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/10"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSendChat()}
+                      disabled={isSending}
+                    />
+                    <button
+                      onClick={handleSendChat}
+                      disabled={isSending || !prompt.trim()}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-5 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Send className="h-4 w-4" />
+                      Send
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    <span className="inline-flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                      AES-256-GCM vault
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
+                      Multi-provider routing
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Activity className="h-3.5 w-3.5 text-amber-400" />
+                      Quota-aware failover
+                    </span>
+                  </div>
+
+                  <div className="max-h-[380px] space-y-4 overflow-y-auto rounded-3xl border border-slate-800 bg-slate-950/40 p-4">
+                    {messages.length === 0 ? (
+                      <div className="flex min-h-[240px] flex-col items-center justify-center text-center text-slate-500">
+                        <Terminal className="mb-4 h-10 w-10 text-slate-600" />
+                        <p className="text-sm font-medium text-slate-400">
+                          No messages yet.
+                        </p>
+                        <p className="mt-1 max-w-sm text-xs leading-5">
+                          Start a request to see the routing, fallback, and
+                          error handling flow in action.
+                        </p>
+                      </div>
+                    ) : (
+                      messages.map((message, index) => (
+                        <div
+                          key={index}
+                          className={cn(
+                            "flex max-w-[82%] flex-col gap-1",
+                            message.role === "user"
+                              ? "ml-auto items-end"
+                              : "mr-auto items-start",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "rounded-3xl px-4 py-3 text-sm leading-relaxed",
+                              message.role === "user"
+                                ? "rounded-br-md bg-indigo-500 text-white"
+                                : message.isError
+                                  ? "rounded-bl-md border border-red-500/20 bg-red-500/10 text-red-300"
+                                  : "rounded-bl-md border border-slate-800 bg-slate-900 text-slate-200",
+                            )}
+                          >
+                            {message.content}
+                          </div>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                            {message.role}
+                          </span>
+                        </div>
+                      ))
+                    )}
+
+                    {isSending && (
+                      <div className="flex items-center gap-2 px-1 text-xs text-slate-400">
+                        <RefreshCw className="h-4 w-4 animate-spin text-indigo-400" />
+                        Resolving best key and model...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+        </main>
+      </div>
+
+      <ValidationNotificationToast />
     </div>
+  );
+}
+
+function TabButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-w-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition",
+        active
+          ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+          : "text-slate-400 hover:bg-slate-800 hover:text-slate-100",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function BadgeChip({
+  icon,
+  label,
+  tone = "neutral",
+}: {
+  icon: React.ReactNode;
+  label: string;
+  tone?: "neutral" | "safe" | "warning" | "info";
+}) {
+  const tones = {
+    neutral: "border-slate-800 bg-slate-900 text-slate-400",
+    safe: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
+    warning: "border-amber-500/20 bg-amber-500/10 text-amber-300",
+    info: "border-indigo-500/20 bg-indigo-500/10 text-indigo-300",
+  };
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.22em]",
+        tones[tone],
+      )}
+    >
+      {icon}
+      {label}
+    </span>
   );
 }

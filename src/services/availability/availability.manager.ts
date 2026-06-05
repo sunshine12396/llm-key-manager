@@ -219,6 +219,10 @@ export class KeyModelAvailabilityManager {
   // RUNTIME: Model selection
   // ============================================
 
+  getPromotedKey(providerId: AIProviderId): string | null {
+    return availabilityCache.getPromotedKey(providerId);
+  }
+
   /**
    * Get the best available model for a provider.
    * Filters by availability, quota, and safety guards. Sorts by priority.

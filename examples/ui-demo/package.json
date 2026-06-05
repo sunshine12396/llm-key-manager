@@ -2,6 +2,7 @@
   "name": "ui-demo",
   "version": "1.0.0",
   "description": "UI testing dashboard for llm-key-manager",
+  "packageManager": "pnpm@10.27.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

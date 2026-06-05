@@ -50,7 +50,7 @@ example:
 
 # UI Demo
 ui-demo:
-	cd examples/ui-demo && pnpm install && pnpm run dev
+	cd examples/ui-demo && pnpm install && CHOKIDAR_USEPOLLING=true pnpm run dev
 
 # Clean build artifacts
 clean:

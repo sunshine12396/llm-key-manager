@@ -68,6 +68,9 @@ class AvailabilityCache {
   // Index: keyId -> Set of cache keys (for fast key lookup)
   private modelsByKey: Map<string, Set<string>> = new Map();
 
+  // Index: providerId -> best keyId (O(1) lookup)
+  private promotedKeyByProvider: Map<AIProviderId, string | null> = new Map();
+
   // Sync state
   private isInitialized = false;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -108,6 +111,7 @@ class AvailabilityCache {
     this.usableByProvider.clear();
     this.modelsByKey.clear();
     this.sortedByModel.clear();
+    this.promotedKeyByProvider.clear();
 
     const keyMetaMap = new Map(keys.map(k => [k.id, k]));
 
@@ -189,6 +193,8 @@ class AvailabilityCache {
    */
   private rebuildSortedIndex(): void {
     const newSortedIndex = new Map<string, CachedModelState[]>();
+    this.promotedKeyByProvider.clear();
+    const providerModelsMap = new Map<AIProviderId, CachedModelState[]>();
 
     this.cache.forEach((cached) => {
       if (!cached.isUsable) return;
@@ -197,6 +203,11 @@ class AvailabilityCache {
         newSortedIndex.set(cached.modelId, []);
       }
       newSortedIndex.get(cached.modelId)!.push(cached);
+
+      if (!providerModelsMap.has(cached.providerId)) {
+        providerModelsMap.set(cached.providerId, []);
+      }
+      providerModelsMap.get(cached.providerId)!.push(cached);
     });
 
     // Sort each model group by Effective Score
@@ -207,6 +218,19 @@ class AvailabilityCache {
         }
         return a.keyId.localeCompare(b.keyId);
       });
+    });
+
+    // Sort provider groups to find the best key for the provider
+    providerModelsMap.forEach((list, providerId) => {
+      list.sort((a, b) => {
+        if (b.effectiveScore !== a.effectiveScore) {
+          return b.effectiveScore - a.effectiveScore;
+        }
+        return a.keyId.localeCompare(b.keyId);
+      });
+      if (list.length > 0) {
+        this.promotedKeyByProvider.set(providerId, list[0].keyId);
+      }
     });
 
     this.sortedByModel = newSortedIndex;
@@ -270,6 +294,13 @@ class AvailabilityCache {
    */
   getAvailableCount(providerId: AIProviderId): number {
     return this.usableByProvider.get(providerId)?.size ?? 0;
+  }
+
+  /**
+   * Get the primary/promoted key ID for a provider
+   */
+  getPromotedKey(providerId: AIProviderId): string | null {
+    return this.promotedKeyByProvider.get(providerId) || null;
   }
 
   /**

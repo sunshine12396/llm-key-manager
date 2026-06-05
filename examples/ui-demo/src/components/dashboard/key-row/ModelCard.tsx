@@ -13,10 +13,8 @@ import {
 import { Progress } from "../../ui";
 import { cn } from "llm-key-manager/utils/cn";
 
-import {
-  getModelCapabilities,
-  getModelContextWindow,
-} from "llm-key-manager/services/model-capabilities";
+import { getModelCapabilities } from "llm-key-manager/services/model-capabilities";
+import { modelDataService } from "llm-key-manager/services/model-data.service";
 
 import {
   getModelStatusInfo,
@@ -75,7 +73,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
     <div
       className={cn(
         "group relative overflow-hidden rounded-2xl border transition-all duration-300",
-        "bg-gradient-to-b from-slate-900 to-slate-950",
+        "bg-linear-to-b from-slate-900 to-slate-950",
         "shadow-[0_0_0_1px_rgba(255,255,255,0.04)]",
         "hover:-translate-y-1 hover:shadow-2xl",
         isActive
@@ -145,7 +143,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           {/* Context Window */}
           <div className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1">
             <span className="text-[10px] font-semibold tracking-wide text-slate-300">
-              {getModelContextWindow(model)}
+              {modelDataService.getContextWindow(model)}
             </span>
           </div>
         </div>

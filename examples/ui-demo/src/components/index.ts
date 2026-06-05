@@ -9,6 +9,8 @@ export { EditKeyModal } from "./forms/EditKeyModal";
 export { KeyListDashboard } from "./dashboard/KeyListDashboard";
 export { UsageDashboard } from "./dashboard/UsageDashboard";
 export { ErrorLogs } from "./dashboard/ErrorLogs";
+export { SafetyOverview } from "./dashboard/SafetyOverview";
+export { DeveloperPlayground } from "./dashboard/DeveloperPlayground";
 
 // Notifications
 export { ValidationNotificationToast } from "./notifications/ValidationNotificationToast";

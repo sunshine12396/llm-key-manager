@@ -1,6 +1,7 @@
 {
     "name": "llm-key-manager",
     "version": "0.1.0",
+    "packageManager": "pnpm@10.27.0",
     "type": "module",
     "main": "./dist/llm-key-manager.umd.js",
     "module": "./dist/llm-key-manager.es.js",
