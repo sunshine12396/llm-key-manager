@@ -94,11 +94,13 @@ function App() {
 
 ## 📖 Documentation
 
--   [**Unified API Flow**](./docs/unified-api-flow.md) - Deep dive into request execution.
--   [**Developer Guide**](./docs/DEVELOPMENT.md) - Internal architecture and lifecycle.
--   [**Smart Routing**](./docs/features/routing.md) - The Effective Score formula.
--   [**Discovery & Health**](./docs/features/discovery.md) - Background validation logic.
--   [**Model Management**](./docs/features/models.md) - Fallback chains and aliases.
+-   [**Documentation Hub**](./docs/overview.md) - Full docs index with development roadmap.
+-   [**System Architecture**](./docs/architecture/system-architecture.md) - Module graph and request lifecycle.
+-   [**Vault & Security**](./docs/features/01-vault-security/README.md) - AES-256-GCM key encryption.
+-   [**Model Discovery**](./docs/features/02-model-discovery/README.md) - Background validation pipeline.
+-   [**Routing Engine**](./docs/features/03-routing-engine/README.md) - Effective Score formula and fallback chains.
+-   [**Resilience**](./docs/features/04-resilience/README.md) - Circuit breakers, retry, and failover.
+-   [**API Reference**](./docs/guides/api-reference.md) - Public types, methods, and React hooks.
 
 ---
 

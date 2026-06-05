@@ -1,0 +1,81 @@
+# Feature 5: Analytics & Usage Tracking
+
+> **Phase:** 5 (Observability) · **Status:** ✅ Complete
+
+## Purpose
+
+Track API usage, costs, and errors in real-time — all client-side. Provides per-provider statistics, hourly breakdowns for charting, and cost estimation using model-specific pricing data.
+
+## Usage Recording
+
+Every successful API call records:
+
+```typescript
+{
+  keyId: string,
+  providerId: AIProviderId,
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number,
+  cost: number,        // Calculated from MODEL_PRICING
+  success: boolean,
+  latencyMs: number,
+  timestamp: number
+}
+```
+
+Cost is auto-calculated using `MODEL_PRICING` (per 1M tokens). Falls back to provider-level defaults if specific model pricing isn't available.
+
+## Error Recording
+
+Errors are logged with **automatic secret redaction**:
+
+```typescript
+{
+  keyId: string,
+  providerId: AIProviderId,
+  errorType: "rate_limit" | "auth" | "server" | "network" | "quota" | "unknown",
+  message: string,     // Redacted: sk-***, AIzaSy***, Bearer ***
+  retryCount: number,
+  timestamp: number
+}
+```
+
+### Redaction Patterns
+- `sk-[20+ chars]` → `[REDACTED]`
+- `AIzaSy[33 chars]` → `[REDACTED]`
+- `Bearer [token]` → `[REDACTED]`
+- `api_key=[value]` → `[REDACTED]`
+
+## Available Queries
+
+```typescript
+// Per-provider aggregated stats
+analyticsService.getProviderStats("openai", since?);
+// → { totalRequests, successfulRequests, failedRequests, totalTokens, totalCost, avgLatency }
+
+// Hourly breakdown for charts
+analyticsService.getHourlyBreakdown(24);
+// → [{ hour: "09:00", requests, tokens, cost, errors }, ...]
+
+// Raw data access
+analyticsService.getUsageData(startTime?, endTime?);
+analyticsService.getErrorLogs(startTime?, endTime?);
+```
+
+## Storage Limits
+
+| Store | Max In-Memory | Persisted |
+|:------|:-------------|:----------|
+| Usage logs | 1,000 entries | IndexedDB `usageLogs` |
+| Error logs | 500 entries | IndexedDB `errorLogs` |
+
+Oldest entries are trimmed automatically when limits are exceeded.
+
+## Key Files
+
+| File | Purpose |
+|:-----|:--------|
+| `src/services/analytics.service.ts` | Usage/error recording, aggregation, secret redaction |
+| `src/services/model-capabilities.ts` | `calculateCost()` helper |
+| `src/constants/pricing.json` | Per-model pricing data (per 1M tokens) |
