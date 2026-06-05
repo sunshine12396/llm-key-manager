@@ -8,3 +8,4 @@ export { ValidationNotificationToast } from "./components/notifications/Validati
 export { AddKeyForm } from "./components/forms/AddKeyForm";
 export { availabilityManager, keyResolver } from "./services/availability";
 export { safetyGuard } from "./services/safety";
+export { getProviderAdapter, registerCustomAdapter } from "./providers/provider.registry";

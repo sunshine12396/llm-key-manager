@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 export class VaultService {
     private encryptionKey: CryptoKey | null = null;
     private isUnlocked: boolean = false;
+    private decryptedKeyCache = new Map<string, string>();
+    private metadataCache = new Map<string, KeyMetadata>();
 
     constructor() {
         // In a real app, we might check if a key exists in SessionStorage
@@ -47,10 +49,16 @@ export class VaultService {
         }
 
         this.isUnlocked = true;
+        this.clearCache();
     }
 
     isVaultUnlocked(): boolean {
         return this.isUnlocked;
+    }
+
+    clearCache(): void {
+        this.decryptedKeyCache.clear();
+        this.metadataCache.clear();
     }
 
     async addKey(providerId: AIProviderId, apiKey: string, label: string, priority: 'high' | 'medium' | 'low' = 'medium'): Promise<string> {
@@ -83,6 +91,12 @@ export class VaultService {
         };
 
         await db.keys.add(newKey);
+
+        // Populate cache
+        const { encryptedData: _, iv: __, ...meta } = newKey;
+        this.metadataCache.set(id, meta);
+        this.decryptedKeyCache.set(id, apiKey);
+
         return id;
     }
 
@@ -105,23 +119,41 @@ export class VaultService {
         }
 
         await db.keys.update(id, updates);
+
+        // Update cache
+        const cachedMeta = this.metadataCache.get(id);
+        if (cachedMeta) {
+            this.metadataCache.set(id, {
+                ...cachedMeta,
+                ...updates,
+            });
+        }
     }
 
     async getKeyMetadata(id: string): Promise<KeyMetadata | null> {
+        const cached = this.metadataCache.get(id);
+        if (cached !== undefined) return cached;
+
         const record = await db.keys.get(id);
         if (!record) return null;
 
         const { encryptedData, iv, ...meta } = record;
+        this.metadataCache.set(id, meta);
         return meta;
     }
 
     async getKey(id: string): Promise<string> {
         if (!this.encryptionKey) throw new Error('Vault is locked');
 
+        const cached = this.decryptedKeyCache.get(id);
+        if (cached !== undefined) return cached;
+
         const record = await db.keys.get(id);
         if (!record) throw new Error('Key not found');
 
-        return CryptoService.decrypt(record.encryptedData, record.iv, this.encryptionKey);
+        const decrypted = await CryptoService.decrypt(record.encryptedData, record.iv, this.encryptionKey);
+        this.decryptedKeyCache.set(id, decrypted);
+        return decrypted;
     }
 
     async updateKey(id: string, updates: {
@@ -141,10 +173,28 @@ export class VaultService {
         await db.keys.update(id, {
             ...updates,
         });
+
+        // Update cache
+        const cachedMeta = this.metadataCache.get(id);
+        if (cachedMeta) {
+            this.metadataCache.set(id, {
+                ...cachedMeta,
+                ...updates,
+            });
+        }
     }
 
     async revokeKey(id: string): Promise<void> {
         await db.keys.update(id, { isRevoked: true });
+
+        // Update cache
+        const cachedMeta = this.metadataCache.get(id);
+        if (cachedMeta) {
+            this.metadataCache.set(id, {
+                ...cachedMeta,
+                isRevoked: true,
+            });
+        }
     }
 
     async deleteKey(id: string): Promise<void> {
@@ -157,6 +207,10 @@ export class VaultService {
         }
 
         await db.keys.delete(id);
+
+        // Remove from cache
+        this.decryptedKeyCache.delete(id);
+        this.metadataCache.delete(id);
     }
 
     async listKeys(providerId?: AIProviderId): Promise<KeyMetadata[]> {

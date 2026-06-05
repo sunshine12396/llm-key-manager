@@ -26,7 +26,7 @@ import {
 
 export class GeminiPlugin implements IProviderAdapter {
   readonly providerId: AIProviderId = "gemini";
-  readonly baseUrl = "https://generativelanguage.googleapis.com";
+  baseUrl = "https://generativelanguage.googleapis.com";
 
   ownsModel(modelId: string): boolean {
     return ownsModel(modelId);
@@ -63,14 +63,14 @@ export class GeminiPlugin implements IProviderAdapter {
   }
 
   async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
-    return completeChat(apiKey, request);
+    return completeChat(apiKey, request, this.baseUrl);
   }
 
   async embeddings(
     apiKey: string,
     request: EmbeddingRequest,
   ): Promise<EmbeddingResponse> {
-    return generateEmbeddings(apiKey, request);
+    return generateEmbeddings(apiKey, request, this.baseUrl);
   }
 
   async generateImage(

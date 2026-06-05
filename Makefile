@@ -1,7 +1,7 @@
 # LLM Key Manager - Makefile
 # Common development commands
 
-.PHONY: install build clean lint test example ui-demo help
+.PHONY: install build clean lint test example ui-demo help upgrade-lib
 
 # Default target
 help:
@@ -10,14 +10,15 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  install    - Install dependencies"
-	@echo "  build      - Build the library for production"
-	@echo "  clean      - Remove build artifacts and node_modules"
-	@echo "  lint       - Run TypeScript type checking"
-	@echo "  format     - Format code with Prettier"
-	@echo "  test       - Run tests (Vitest)"
-	@echo "  example    - Run the basic usage example"
-	@echo "  ui-demo    - Launch the UI testing dashboard"
+	@echo "  install     - Install dependencies"
+	@echo "  build       - Build the library for production"
+	@echo "  clean       - Remove build artifacts and node_modules"
+	@echo "  lint        - Run TypeScript type checking"
+	@echo "  format      - Format code with Prettier"
+	@echo "  test        - Run tests (Vitest)"
+	@echo "  example     - Run the basic usage example"
+	@echo "  ui-demo     - Launch the UI testing dashboard"
+	@echo "  upgrade-lib - Upgrade all dependencies to latest and run tests"
 	@echo ""
 
 # Install dependencies
@@ -64,3 +65,8 @@ setup: install
 	@echo ""
 	@echo "✅ Setup complete! Run 'make build' or 'make test'."
 	@echo ""
+
+# Upgrade dependencies and run tests
+upgrade-lib:
+	pnpm update --latest
+	pnpm test

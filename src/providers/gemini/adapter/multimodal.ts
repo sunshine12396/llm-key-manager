@@ -2,29 +2,61 @@ import {
   EmbeddingRequest,
   EmbeddingResponse,
 } from "../../../models";
-import { createGeminiClient } from "../client";
+import { fetchWithTimeout } from "../../../utils/fetch-utils";
 import { parseGeminiError } from "./chat";
 
 export async function generateEmbeddings(
   apiKey: string,
   request: EmbeddingRequest,
+  baseUrl = "https://generativelanguage.googleapis.com",
 ): Promise<EmbeddingResponse> {
-  const genAI = createGeminiClient(apiKey);
   const cleanModel = request.model.replace(/^models\//, "").trim();
 
   try {
-    const model = genAI.getGenerativeModel({ model: cleanModel });
-
     if (Array.isArray(request.input)) {
       // Batch embedding
-      const result = await model.batchEmbedContents({
+      const body = {
         requests: request.input.map((t) => ({
-          content: { role: "user", parts: [{ text: t }] },
+          model: `models/${cleanModel}`,
+          content: { parts: [{ text: t }] },
         })),
-      });
+      };
 
+      const res = await fetchWithTimeout(
+        `${baseUrl}/v1beta/models/${cleanModel}:batchEmbedContents?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        },
+        30000,
+      );
+
+      if (!res.ok) {
+        let message = `HTTP error ${res.status}`;
+        let errorJson: any = null;
+        try {
+          errorJson = await res.json();
+          if (errorJson?.error?.message) {
+            message = errorJson.error.message;
+          }
+        } catch {
+          // ignore
+        }
+        throw {
+          message,
+          status: res.status,
+          response: {
+            json: () => errorJson,
+          },
+        };
+      }
+
+      const data = await res.json();
       return {
-        data: result.embeddings.map((emb, index) => ({
+        data: (data.embeddings || []).map((emb: any, index: number) => ({
           embedding: emb.values,
           index: index,
           object: "embedding",
@@ -33,12 +65,47 @@ export async function generateEmbeddings(
       };
     } else {
       // Single embedding
-      const result = await model.embedContent(request.input);
+      const body = {
+        content: { parts: [{ text: request.input }] },
+      };
 
+      const res = await fetchWithTimeout(
+        `${baseUrl}/v1beta/models/${cleanModel}:embedContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        },
+        30000,
+      );
+
+      if (!res.ok) {
+        let message = `HTTP error ${res.status}`;
+        let errorJson: any = null;
+        try {
+          errorJson = await res.json();
+          if (errorJson?.error?.message) {
+            message = errorJson.error.message;
+          }
+        } catch {
+          // ignore
+        }
+        throw {
+          message,
+          status: res.status,
+          response: {
+            json: () => errorJson,
+          },
+        };
+      }
+
+      const data = await res.json();
       return {
         data: [
           {
-            embedding: result.embedding.values,
+            embedding: data.embedding?.values || [],
             index: 0,
             object: "embedding",
           },

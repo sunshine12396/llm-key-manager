@@ -1,5 +1,5 @@
 import { ChatRequest, ChatResponse } from "../../../models";
-import { createGeminiClient } from "../client";
+import { fetchWithTimeout } from "../../../utils/fetch-utils";
 import {
   extractErrorCode,
   createTypedError,
@@ -9,16 +9,12 @@ import {
  * Parse Gemini error for retry info and structured message
  */
 export function parseGeminiError(error: any, modelId: string): Error {
+  const status = error.status || error.response?.status;
   let message = error.message || String(error);
   let retryAfterMs: number | undefined;
 
   try {
-    const jsonMatch = message.match(/\[\{(.*?)\}\]$/);
-    const data = jsonMatch
-      ? JSON.parse(jsonMatch[0])
-      : error.response
-        ? error.response.json?.()
-        : null;
+    const data = error.response ? error.response.json?.() : null;
 
     if (data) {
       const errorArray = Array.isArray(data) ? data : [data];
@@ -41,7 +37,7 @@ export function parseGeminiError(error: any, modelId: string): Error {
     // Ignore parse errors - use original message
   }
 
-  const errorCode = extractErrorCode(message);
+  const errorCode = extractErrorCode(message) ?? status;
   const formattedMessage = `Gemini API Error ${errorCode || "Unknown"}: ${message}`;
 
   return createTypedError(formattedMessage, errorCode, "gemini", {
@@ -53,17 +49,12 @@ export function parseGeminiError(error: any, modelId: string): Error {
 export async function completeChat(
   apiKey: string,
   request: ChatRequest,
+  baseUrl = "https://generativelanguage.googleapis.com",
 ): Promise<ChatResponse> {
-  const genAI = createGeminiClient(apiKey);
   const cleanModel = request.model.replace(/^models\//, "").trim();
 
   try {
     const systemMessage = request.messages.find((m) => m.role === "system");
-
-    const model = genAI.getGenerativeModel({
-      model: cleanModel,
-      systemInstruction: systemMessage?.content,
-    });
 
     const contents = request.messages
       .filter((m) => m.role !== "system")
@@ -72,33 +63,65 @@ export async function completeChat(
         parts: [{ text: m.content }],
       }));
 
-    // Build request options with timeout support
-    const requestOptions: any = {};
-    if (request.timeout) {
-      requestOptions.timeout = request.timeout;
+    const body: any = {
+      contents,
+      generationConfig: {
+        maxOutputTokens: request.maxTokens,
+        temperature: request.temperature,
+      },
+    };
+
+    if (systemMessage?.content) {
+      body.systemInstruction = {
+        parts: [{ text: systemMessage.content }],
+      };
     }
 
-    const result = await model.generateContent(
+    const res = await fetchWithTimeout(
+      `${baseUrl}/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`,
       {
-        contents,
-        generationConfig: {
-          maxOutputTokens: request.maxTokens,
-          temperature: request.temperature,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify(body),
       },
-      requestOptions,
+      request.timeout || 30000,
     );
 
-    const response = result.response;
-    const text = response.text();
+    if (!res.ok) {
+      let message = `HTTP error ${res.status}`;
+      let errorJson: any = null;
+      try {
+        errorJson = await res.json();
+        if (errorJson?.error?.message) {
+          message = errorJson.error.message;
+        } else if (typeof errorJson === "object") {
+          message = JSON.stringify(errorJson);
+        }
+      } catch {
+        // ignore
+      }
+      throw {
+        message,
+        status: res.status,
+        response: {
+          json: () => errorJson,
+        },
+      };
+    }
+
+    const data = await res.json();
+    const candidate = data.candidates?.[0];
+    const text = candidate?.content?.parts?.[0]?.text || "";
 
     return {
       content: text,
-      usage: response.usageMetadata
+      usage: data.usageMetadata
         ? {
-            promptTokens: response.usageMetadata.promptTokenCount,
-            completionTokens: response.usageMetadata.candidatesTokenCount,
-            totalTokens: response.usageMetadata.totalTokenCount,
+            promptTokens: data.usageMetadata.promptTokenCount,
+            completionTokens: data.usageMetadata.candidatesTokenCount,
+            totalTokens: data.usageMetadata.totalTokenCount,
           }
         : undefined,
       model: request.model,

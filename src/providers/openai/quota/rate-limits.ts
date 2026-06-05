@@ -2,24 +2,31 @@ import { RateLimitData } from "../../../models";
 
 const VALIDATION_MODEL = "gpt-4o-mini";
 
+import { fetchWithTimeout } from "../../../utils/fetch-utils";
+
 export async function checkRateLimits(
   apiKey: string,
   modelId?: string,
+  baseUrl = "https://api.openai.com/v1",
 ): Promise<RateLimitData> {
   const targetModel = modelId || VALIDATION_MODEL;
   try {
-    const { createOpenAIClient } = await import("../client");
-    const client = createOpenAIClient(apiKey);
-
-    // We use a minimal completion request to get the actual rate limit headers using the SDK
-    // Using asResponse() to access headers
-    const response = await client.chat.completions
-      .create({
-        model: targetModel,
-        messages: [{ role: "user", content: "1" }],
-        max_tokens: 1,
-      })
-      .asResponse();
+    const response = await fetchWithTimeout(
+      `${baseUrl}/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [{ role: "user", content: "1" }],
+          max_tokens: 1,
+        }),
+      },
+      10000,
+    );
 
     const headers = response.headers;
 

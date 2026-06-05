@@ -328,7 +328,10 @@ describe("Unified API Interface", () => {
           if (attempt === 2) {
             // Second attempt: verify exclusions
             // We verify that key-1 is in the excluded list
-            if (!options?.excludeKeyIds?.includes("key-1")) {
+            const isExcluded = options?.excludeKeyIds instanceof Set
+                ? options.excludeKeyIds.has("key-1")
+                : (options?.excludeKeyIds as string[] | undefined)?.includes("key-1");
+            if (!isExcluded) {
               throw new Error("Failed key was not excluded");
             }
 

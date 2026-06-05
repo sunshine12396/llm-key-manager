@@ -1,4 +1,4 @@
-import { createOpenAIClient } from "../client";
+import { fetchWithTimeout } from "../../../utils/fetch-utils";
 
 // Constants for validation and filtering
 const EXCLUDED_ID_PATTERNS = [
@@ -26,10 +26,26 @@ const MODEL_PRIORITY = [
 // Patterns that identify OpenAI chat models
 const CHAT_MODEL_PREFIXES = ["gpt-", "o1", "o3", "o4"];
 
-export async function listModels(apiKey: string): Promise<string[]> {
-  const client = createOpenAIClient(apiKey);
+export async function listModels(
+  apiKey: string,
+  baseUrl = "https://api.openai.com/v1",
+): Promise<string[]> {
   try {
-    const response = await client.models.list();
+    const res = await fetchWithTimeout(
+      `${baseUrl}/models`,
+      {
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+        },
+      },
+      10000,
+    );
+
+    if (!res.ok) {
+      throw new Error(`HTTP error ${res.status}`);
+    }
+
+    const response = await res.json();
 
     // Filter and normalize OpenAI models
     return (response.data || [])

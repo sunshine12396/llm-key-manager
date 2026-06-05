@@ -30,7 +30,7 @@ import {
 
 export class OpenAIPlugin implements IProviderAdapter {
   readonly providerId: AIProviderId = "openai";
-  readonly baseUrl = "https://api.openai.com/v1";
+  baseUrl = "https://api.openai.com/v1";
 
   ownsModel(modelId: string): boolean {
     return ownsModel(modelId);
@@ -45,7 +45,7 @@ export class OpenAIPlugin implements IProviderAdapter {
   }
 
   async listModels(apiKey: string): Promise<string[]> {
-    return listModels(apiKey);
+    return listModels(apiKey, this.baseUrl);
   }
 
   getHeaders(apiKey: string): Record<string, string> {
@@ -59,7 +59,7 @@ export class OpenAIPlugin implements IProviderAdapter {
     apiKey: string,
     modelId?: string,
   ): Promise<RateLimitData> {
-    return checkRateLimits(apiKey, modelId);
+    return checkRateLimits(apiKey, modelId, this.baseUrl);
   }
 
   detectTier(rateLimits?: RateLimitData): string {
@@ -67,34 +67,34 @@ export class OpenAIPlugin implements IProviderAdapter {
   }
 
   async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
-    return completeChat(apiKey, request);
+    return completeChat(apiKey, request, this.baseUrl);
   }
 
   async embeddings(
     apiKey: string,
     request: EmbeddingRequest,
   ): Promise<EmbeddingResponse> {
-    return generateEmbeddings(apiKey, request);
+    return generateEmbeddings(apiKey, request, this.baseUrl);
   }
 
   async generateImage(
     apiKey: string,
     request: ImageGenerationRequest,
   ): Promise<ImageGenerationResponse> {
-    return generateImage(apiKey, request);
+    return generateImage(apiKey, request, this.baseUrl);
   }
 
   async transcribeAudio(
     apiKey: string,
     request: AudioTranscriptionRequest,
   ): Promise<AudioTranscriptionResponse> {
-    return transcribeAudio(apiKey, request);
+    return transcribeAudio(apiKey, request, this.baseUrl);
   }
 
   async textToSpeech(
     apiKey: string,
     request: TextToSpeechRequest,
   ): Promise<TextToSpeechResponse> {
-    return textToSpeech(apiKey, request);
+    return textToSpeech(apiKey, request, this.baseUrl);
   }
 }

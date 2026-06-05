@@ -21,8 +21,8 @@ export class LLMError extends Error {
     super(message);
     this.name = "LLMError";
     // Maintain proper stack trace in V8 environments
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, LLMError);
+    if ((Error as any).captureStackTrace) {
+      (Error as any).captureStackTrace(this, LLMError);
     }
   }
 

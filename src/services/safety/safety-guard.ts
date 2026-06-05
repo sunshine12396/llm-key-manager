@@ -270,8 +270,8 @@ class SafetyGuard {
     return result;
   }
 
-  isKeyCircuitOpen(keyId: string): boolean {
-    return this.breaker.isKeyCircuitOpen(keyId);
+  isKeyCircuitOpen(keyId: string, providerId?: AIProviderId): boolean {
+    return this.breaker.isKeyCircuitOpen(keyId, providerId);
   }
 
   getKeyCircuitState(keyId: string): CircuitState {
@@ -344,7 +344,7 @@ class SafetyGuard {
       return { allowed: false, reason: `Key ${keyId} is disabled` };
     }
 
-    if (this.isKeyCircuitOpen(keyId)) {
+    if (this.isKeyCircuitOpen(keyId, providerId)) {
       return { allowed: false, reason: `Key ${keyId} circuit is OPEN` };
     }
 

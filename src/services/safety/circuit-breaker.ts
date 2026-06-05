@@ -106,15 +106,22 @@ export class CircuitBreaker {
   /**
    * Check if key circuit is open (blocking requests)
    */
-  isKeyCircuitOpen(keyId: string): boolean {
-    return this.getKeyCircuit(keyId).state === "OPEN";
+  isKeyCircuitOpen(keyId: string, providerId?: AIProviderId): boolean {
+    const circuit = this.getKeyCircuit(keyId);
+    const config = this.getConfig(providerId);
+    return this.refreshOpenCircuit(circuit, config, `key:${keyId}`) === "OPEN";
   }
 
   /**
    * Check if provider circuit is open
    */
   isProviderCircuitOpen(providerId: AIProviderId): boolean {
-    return this.getProviderCircuit(providerId).state === "OPEN";
+    const circuit = this.getProviderCircuit(providerId);
+    const config = this.getConfig(providerId);
+    return (
+      this.refreshOpenCircuit(circuit, config, `provider:${providerId}`) ===
+      "OPEN"
+    );
   }
 
   /**
@@ -293,6 +300,25 @@ export class CircuitBreaker {
         label,
         reason: `${config.failureThreshold} failures`,
       });
+    }
+
+    return circuit.state;
+  }
+
+  private refreshOpenCircuit(
+    circuit: CircuitBreakerState,
+    config: CircuitBreakerConfig,
+    label: string,
+  ): CircuitState {
+    if (circuit.state !== "OPEN") return circuit.state;
+
+    const now = Date.now();
+    if (circuit.openedAt && now - circuit.openedAt > config.cooldownMs) {
+      circuit.state = "HALF_OPEN";
+      circuit.successes = 0;
+      console.log(
+        `[CircuitBreaker] 🔄 ${label} -> HALF_OPEN (testing recovery)`,
+      );
     }
 
     return circuit.state;

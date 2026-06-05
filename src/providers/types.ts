@@ -36,7 +36,7 @@ export interface KeyFormatValidationResult {
 
 export interface IProviderAdapter {
     readonly providerId: AIProviderId;
-    readonly baseUrl: string;
+    baseUrl: string;
 
     /**
      * Check whether a model supports a specific capability

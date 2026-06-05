@@ -59,25 +59,28 @@ export class UnifiedLLMClient {
       request.model,
       options?.providerId,
     );
-    console.log(`[UnifiedClient] Using model chain for ${request.model}:`, modelChain);
 
-    const permanentlyExcludedKeys = new Set<string>();
+    let permanentlyExcludedKeys: Set<string> | undefined;
     let lastError: Error | null = null;
     let totalAttempts = 0;
 
     for (const modelId of modelChain) {
-      const attemptedKeysForModel = new Set<string>();
+      let attemptedKeysForModel: Set<string> | undefined;
 
       while (true) {
         const sticky = this.stickyModels.get(capabilityKey);
 
+        let excludeKeyIds: Set<string> | undefined;
+        if (permanentlyExcludedKeys || attemptedKeysForModel) {
+            excludeKeyIds = new Set<string>();
+            if (permanentlyExcludedKeys) permanentlyExcludedKeys.forEach(k => excludeKeyIds!.add(k));
+            if (attemptedKeysForModel) attemptedKeysForModel.forEach(k => excludeKeyIds!.add(k));
+        }
+
         const resolved = await keyResolver.resolve(modelId, {
           providerId: options?.providerId,
           preferredKeyId: sticky?.keyId,
-          excludeKeyIds: [
-            ...permanentlyExcludedKeys,
-            ...attemptedKeysForModel,
-          ],
+          excludeKeyIds,
         });
 
         if (!resolved) break;
@@ -91,14 +94,16 @@ export class UnifiedLLMClient {
           const response = await adapter.chat(resolved.apiKey, {
             ...request,
             model: resolved.modelId,
+            timeout: options?.timeout ?? request.timeout,
           });
 
           const latency = Date.now() - start;
 
-          await availabilityManager.markModelAvailable(
+          // Non-blocking availability update
+          availabilityManager.markModelAvailable(
             resolved.keyId,
             resolved.modelId,
-          );
+          ).catch(() => {});
 
           keyResolver.markSuccess(
             resolved.keyId,
@@ -133,9 +138,11 @@ export class UnifiedLLMClient {
             lastError.message,
           );
 
+          if (!attemptedKeysForModel) attemptedKeysForModel = new Set();
           attemptedKeysForModel.add(resolved.keyId);
 
           if (this.isPermanentFailure(code)) {
+            if (!permanentlyExcludedKeys) permanentlyExcludedKeys = new Set();
             permanentlyExcludedKeys.add(resolved.keyId);
           }
 

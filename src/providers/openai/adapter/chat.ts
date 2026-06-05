@@ -1,5 +1,5 @@
 import { ChatRequest, ChatResponse } from "../../../models";
-import { createOpenAIClient } from "../client";
+import { fetchWithTimeout } from "../../../utils/fetch-utils";
 import { parseOpenAIError } from "./errors";
 
 /**
@@ -55,94 +55,121 @@ function mapMessagesForResponses(messages: ChatRequest["messages"]) {
 export async function completeChat(
   apiKey: string,
   request: ChatRequest,
+  baseUrl = "https://api.openai.com/v1",
 ): Promise<ChatResponse> {
-  const client = createOpenAIClient(apiKey);
+  const useResponses = requiresResponsesAPI(request.model);
+  const url = useResponses
+    ? `${baseUrl}/responses`
+    : `${baseUrl}/chat/completions`;
 
-  const useResponsesAPI = async (
-    modelId: string,
-    chatRequest: ChatRequest,
-  ): Promise<ChatResponse> => {
-    // Responses API requires >= 16 output tokens
-    const safeMaxTokens =
-      chatRequest.maxTokens !== undefined
-        ? Math.max(chatRequest.maxTokens, 16)
-        : undefined;
-
-    const options = request.timeout ? { timeout: request.timeout } : undefined;
-
-    const response = await (client as any).responses.create(
-      {
-        model: modelId,
-        input: mapMessagesForResponses(chatRequest.messages),
-        max_output_tokens: safeMaxTokens,
-        temperature: chatRequest.temperature ?? 1,
-        // IMPORTANT: do NOT store user prompts by default
-        store: false,
-      },
-      options,
-    );
-
-    return {
-      content: extractResponsesText(response),
-      usage: response.usage
-        ? {
-            promptTokens: response.usage.input_tokens,
-            completionTokens: response.usage.output_tokens,
-            totalTokens:
-              (response.usage.input_tokens || 0) +
-              (response.usage.output_tokens || 0),
-          }
-        : undefined,
-      model: response.model || modelId,
-    };
+  const headers: Record<string, string> = {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
   };
 
-  try {
-    // Primary routing
-    if (requiresResponsesAPI(request.model)) {
-      return await useResponsesAPI(request.model, request);
-    }
+  let body: any;
 
+  if (useResponses) {
+    const safeMaxTokens =
+      request.maxTokens !== undefined
+        ? Math.max(request.maxTokens, 16)
+        : undefined;
+
+    body = {
+      model: request.model,
+      input: mapMessagesForResponses(request.messages),
+      max_output_tokens: safeMaxTokens,
+      temperature: request.temperature ?? 1,
+      store: false,
+    };
+  } else {
     const reasoning = isReasoningModel(request.model);
-
-    const params: any = {
+    body = {
       model: request.model,
       messages: request.messages,
       stream: false,
     };
 
     if (reasoning) {
-      // o1-preview / o1-mini rules
       if (request.maxTokens !== undefined) {
-        params.max_completion_tokens = request.maxTokens;
+        body.max_completion_tokens = request.maxTokens;
       }
-      params.temperature = 1;
+      body.temperature = 1;
     } else {
-      // Standard chat models
       if (request.maxTokens !== undefined) {
-        params.max_tokens = request.maxTokens;
+        body.max_tokens = request.maxTokens;
       }
       if (request.temperature !== undefined) {
-        params.temperature = request.temperature;
+        body.temperature = request.temperature;
       }
     }
+  }
 
-    const options = request.timeout ? { timeout: request.timeout } : undefined;
-    const response = await client.chat.completions.create(params, options);
-    const casted = response as any;
-    const choice = casted.choices?.[0];
+  try {
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      },
+      request.timeout || 30000,
+    );
 
-    return {
-      content: choice?.message?.content || "",
-      usage: casted.usage
-        ? {
-            promptTokens: casted.usage.prompt_tokens,
-            completionTokens: casted.usage.completion_tokens,
-            totalTokens: casted.usage.total_tokens,
-          }
-        : undefined,
-      model: casted.model || request.model,
-    };
+    if (!res.ok) {
+      let message = `HTTP error ${res.status}`;
+      let errorJson: any = null;
+      try {
+        errorJson = await res.json();
+        if (errorJson?.error?.message) {
+          message = errorJson.error.message;
+        } else if (typeof errorJson === "object") {
+          message = JSON.stringify(errorJson);
+        }
+      } catch {
+        // ignore
+      }
+      const headersObj: Record<string, string> = {};
+      res.headers.forEach((value, key) => {
+        headersObj[key] = value;
+      });
+      throw {
+        status: res.status,
+        message,
+        headers: headersObj,
+      };
+    }
+
+    const data = await res.json();
+
+    if (useResponses) {
+      return {
+        content: extractResponsesText(data),
+        usage: data.usage
+          ? {
+              promptTokens: data.usage.input_tokens,
+              completionTokens: data.usage.output_tokens,
+              totalTokens:
+                (data.usage.input_tokens || 0) +
+                (data.usage.output_tokens || 0),
+            }
+          : undefined,
+        model: data.model || request.model,
+      };
+    } else {
+      const choice = data.choices?.[0];
+      return {
+        content: choice?.message?.content || "",
+        usage: data.usage
+          ? {
+              promptTokens: data.usage.prompt_tokens,
+              completionTokens: data.usage.completion_tokens,
+              totalTokens: data.usage.total_tokens,
+            }
+          : undefined,
+        model: data.model || request.model,
+      };
+    }
   } catch (error: any) {
     throw parseOpenAIError(error, request.model);
   }

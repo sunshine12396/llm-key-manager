@@ -269,7 +269,7 @@ export class KeyModelAvailabilityManager {
 
         // Check key-level safety
         if (safetyGuard.isKeyDisabled(m.keyId)) return false;
-        if (safetyGuard.isKeyCircuitOpen(m.keyId)) return false;
+        if (safetyGuard.isKeyCircuitOpen(m.keyId, m.providerId)) return false;
 
         if (excludeKeyIds.includes(m.keyId)) return false;
         if (m.quotaRemaining !== undefined && m.quotaRemaining <= 0)
@@ -319,7 +319,7 @@ export class KeyModelAvailabilityManager {
 
     // 2. Check safety guards (Circuit breaker, manual disable)
     if (safetyGuard.isKeyDisabled(keyId)) return false;
-    if (safetyGuard.isKeyCircuitOpen(keyId)) return false;
+    if (safetyGuard.isKeyCircuitOpen(keyId, model.providerId)) return false;
 
     return true;
   }

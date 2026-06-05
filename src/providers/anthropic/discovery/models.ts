@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "../../../utils/fetch-utils";
+
 // Priority for model sorting (index = priority, lower = better)
 const MODEL_PRIORITY = [
   "claude-4", // Future-proof
@@ -22,12 +24,23 @@ export async function listModels(
   _baseUrl: string,
 ): Promise<string[]> {
   try {
-    const { createAnthropicClient } = await import("../client");
-    const client = createAnthropicClient(apiKey);
-    const response = await client.models.list();
+    const res = await fetchWithTimeout(
+      "https://api.anthropic.com/v1/models",
+      {
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2024-10-22",
+        },
+      },
+      10000,
+    );
 
-    // SDK returns a Page<Model>, we map to string[]
-    const models = response.data.map((m) => m.id);
+    if (!res.ok) {
+      throw new Error(`HTTP error ${res.status}`);
+    }
+
+    const response = await res.json();
+    const models = (response.data || []).map((m: any) => m.id);
 
     // Sort by priority
     return models.sort((a: string, b: string) => {

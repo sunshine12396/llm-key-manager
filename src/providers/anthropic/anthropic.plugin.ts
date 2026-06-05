@@ -25,7 +25,7 @@ import {
 
 export class AnthropicPlugin implements IProviderAdapter {
   readonly providerId: AIProviderId = "anthropic";
-  readonly baseUrl = "https://api.anthropic.com/v1";
+  baseUrl = "https://api.anthropic.com/v1";
 
   ownsModel(modelId: string): boolean {
     return ownsModel(modelId);
@@ -64,7 +64,7 @@ export class AnthropicPlugin implements IProviderAdapter {
   }
 
   async chat(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
-    return completeChat(apiKey, request);
+    return completeChat(apiKey, request, this.baseUrl);
   }
 
   async embeddings(

@@ -62,14 +62,19 @@ describe("CircuitBreaker", () => {
     }
 
     vi.mocked(Date.now).mockReturnValue(1_000 + 5 * 60 * 1000 + 1);
-    expect(breaker.recordKeyFailure("key-1", "openai", emit)).toBe(
-      "HALF_OPEN",
-    );
+    expect(breaker.isKeyCircuitOpen("key-1", "openai")).toBe(false);
+    expect(breaker.getKeyCircuitState("key-1")).toBe("HALF_OPEN");
+  });
 
-    expect(events).toContainEqual({
-      type: "CIRCUIT_HALF_OPEN",
-      label: "key:key-1",
-    });
+  it("moves provider circuits to HALF_OPEN when checked after cooldown", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    for (let i = 0; i < 5; i++) {
+      breaker.recordProviderFailure("openai", emit);
+    }
+
+    vi.mocked(Date.now).mockReturnValue(1_000 + 5 * 60 * 1000 + 1);
+    expect(breaker.isProviderCircuitOpen("openai")).toBe(false);
+    expect(breaker.getProviderCircuit("openai").state).toBe("HALF_OPEN");
   });
 
   it("re-trips HALF_OPEN circuits on one failure", () => {

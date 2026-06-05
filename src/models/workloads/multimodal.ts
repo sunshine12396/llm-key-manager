@@ -41,7 +41,7 @@ export interface ImageGenerationResponse {
 
 export interface AudioTranscriptionRequest {
     model: string;
-    file: Blob | Buffer; // Check environment compatibility
+    file: Blob | any; // Check environment compatibility
     language?: string;
     prompt?: string;
     responseFormat?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt';

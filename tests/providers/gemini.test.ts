@@ -1,6 +1,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { GeminiPlugin } from '../../src/providers/gemini/gemini.plugin';
+import { parseGeminiError } from '../../src/providers/gemini/adapter/chat';
 import { modelDataService } from '../../src/services/model-data.service';
 
 vi.mock('../../src/services/model-data.service');
@@ -38,5 +39,23 @@ describe('Gemini Provider Plugin', () => {
 
         const invalid = plugin.validateKeyFormat('AIzaSyD_too-short');
         expect(invalid.isValid).toBe(false);
+    });
+
+    it('should preserve HTTP status when parsing Gemini errors', () => {
+        const error = parseGeminiError({
+            status: 503,
+            message: 'The model is overloaded. Please try again later.',
+            response: {
+                json: () => ({
+                    error: {
+                        status: 'UNAVAILABLE',
+                        message: 'The model is overloaded. Please try again later.',
+                    },
+                }),
+            },
+        }, 'gemini-2.5-flash') as any;
+
+        expect(error.code).toBe(503);
+        expect(error.message).toContain('Gemini API Error 503');
     });
 });

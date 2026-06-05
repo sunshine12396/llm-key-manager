@@ -30,7 +30,7 @@ export interface ResolvedKey {
 
 export interface ResolveOptions {
   providerId?: AIProviderId;
-  excludeKeyIds?: string[];
+  excludeKeyIds?: string[] | ReadonlySet<string>;
   preferredModelId?: string;
   preferredKeyId?: string; // Support for session stickiness
 }
@@ -150,11 +150,16 @@ class KeyResolver {
   private filterByModel(
     models: CachedModelState[],
     modelId: string,
-    excludeKeyIds?: string[],
+    excludeKeyIds?: string[] | ReadonlySet<string>,
   ): CachedModelState[] {
+    const isExcluded = (id: string) => {
+      if (!excludeKeyIds) return false;
+      return excludeKeyIds instanceof Set ? excludeKeyIds.has(id) : (excludeKeyIds as string[]).includes(id);
+    };
+
     return models.filter((m) => {
-      if (excludeKeyIds?.includes(m.keyId)) return false;
-      if (!this.isKeySafe(m.keyId)) return false;
+      if (isExcluded(m.keyId)) return false;
+      if (!this.isKeySafe(m.keyId, m.providerId)) return false;
 
       // 1. Exact match
       if (m.modelId === modelId) return true;
@@ -171,20 +176,25 @@ class KeyResolver {
    */
   private filterByExclusions(
     models: CachedModelState[],
-    excludeKeyIds?: string[],
+    excludeKeyIds?: string[] | ReadonlySet<string>,
   ): CachedModelState[] {
+    const isExcluded = (id: string) => {
+      if (!excludeKeyIds) return false;
+      return excludeKeyIds instanceof Set ? excludeKeyIds.has(id) : (excludeKeyIds as string[]).includes(id);
+    };
+
     return models.filter((m) => {
-      if (excludeKeyIds?.includes(m.keyId)) return false;
-      return this.isKeySafe(m.keyId);
+      if (isExcluded(m.keyId)) return false;
+      return this.isKeySafe(m.keyId, m.providerId);
     });
   }
 
   /**
    * Check if a key is safe to use (not disabled, circuit not open)
    */
-  private isKeySafe(keyId: string): boolean {
+  private isKeySafe(keyId: string, providerId?: AIProviderId): boolean {
     if (safetyGuard.isKeyDisabled(keyId)) return false;
-    if (safetyGuard.isKeyCircuitOpen(keyId)) return false;
+    if (safetyGuard.isKeyCircuitOpen(keyId, providerId)) return false;
     return true;
   }
 
@@ -195,8 +205,10 @@ class KeyResolver {
     cached: CachedModelState,
   ): Promise<ResolvedKey | null> {
     try {
-      const apiKey = await vaultService.getKey(cached.keyId);
-      const keyMetadata = await vaultService.getKeyMetadata(cached.keyId);
+      const [apiKey, keyMetadata] = await Promise.all([
+        vaultService.getKey(cached.keyId),
+        vaultService.getKeyMetadata(cached.keyId),
+      ]);
 
       if (!keyMetadata) return null;
 
@@ -219,7 +231,7 @@ class KeyResolver {
   private async findKeyForModel(
     modelId: string,
     providerId: AIProviderId,
-    excludeKeyIds?: string[],
+    excludeKeyIds?: string[] | ReadonlySet<string>,
   ): Promise<ResolvedKey | null> {
     const usable = availabilityCache
       .getUsableKeysForModel(modelId)

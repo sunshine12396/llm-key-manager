@@ -1,15 +1,22 @@
 import { RateLimitData } from "../../../models";
 
+import { fetchWithTimeout } from "../../../utils/fetch-utils";
+
 export async function checkRateLimits(
   apiKey: string,
   _baseUrl: string,
 ): Promise<RateLimitData> {
   try {
-    const { createAnthropicClient } = await import("../client");
-    const client = createAnthropicClient(apiKey);
-
-    // Use .asResponse() to get headers from a lightweight call (models.list)
-    const response = await client.models.list().asResponse();
+    const response = await fetchWithTimeout(
+      "https://api.anthropic.com/v1/models",
+      {
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2024-10-22",
+        },
+      },
+      10000,
+    );
     const headers = response.headers;
 
     return {
